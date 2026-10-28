@@ -7,6 +7,7 @@ static NSThread *track_game_thread;
 static NSString *track_saved_alias;
 static NSString *track_race_alias;
 static unsigned track_pending_requests;
+static atomic_int track_retry_mode;
 static void track_complete_request(int kind);
 
 static NSString *track_save_path(void) {
@@ -79,22 +80,26 @@ static void track_tick(void) {
     NSDictionary *document=@{@"schema":@1,@"alias":alias};NSData *data=[NSJSONSerialization dataWithJSONObject:document options:NSJSONWritingSortedKeys error:nil];
     if([data writeToFile:track_save_path() options:NSDataWritingAtomic error:nil])track_saved_alias=alias;
 }
-static NSString *track_match_path(uint8_t type) {
+static NSString *track_match_path(uint8_t type,uint8_t mode) {
     if(!track_local(track_time_attack))return nil;
     NSString *key=type==0?@"speed":@"item",*alias=profile_string(track_time_attack+0x98);
     NSDictionary *definition=alias?track_definitions[alias]:nil;
+    if(!definition){record(@"local match requires a valid original track selection");return nil;}
     if(![definition[key] boolValue]) {
-        alias=track_saved_alias;definition=alias?track_definitions[alias]:nil;
+        NSString *message=[NSString stringWithFormat:@"所选赛道 %@ 只支持%@。请在原版比赛菜单选择对应模式，或重新选一张支持当前模式的赛道。",alias,[definition[@"speed"] boolValue]?@"竞速赛":@"道具赛"];
+        dispatch_async(dispatch_get_main_queue(),^{
+            UIViewController *view=UIApplication.sharedApplication.keyWindow.rootViewController;
+            while(view.presentedViewController)view=view.presentedViewController;
+            if([view isKindOfClass:UIAlertController.class])return;
+            UIAlertController *alert=[UIAlertController alertControllerWithTitle:@"赛道与模式不匹配" message:message preferredStyle:UIAlertControllerStyleAlert];
+            int target=[definition[@"speed"] boolValue]?(mode>3?mode-3:mode):(mode<4?mode+3:mode);
+            NSString *title=[definition[@"speed"] boolValue]?@"改用竞速赛进入":@"改用道具赛进入";
+            [alert addAction:[UIAlertAction actionWithTitle:title style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){atomic_store(&track_retry_mode,target);}]];
+            [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+            [view presentViewController:alert animated:YES completion:nil];
+        });
+        record([NSString stringWithFormat:@"local match blocked incompatible selected track=%@ race_type=%u; selection preserved",alias,type]);return nil;
     }
-    if(![definition[key] boolValue]) {
-        alias=@"Village_I01";definition=track_definitions[alias];
-    }
-    if(![definition[key] boolValue]) {
-        // A speed-only track has no original item layout. Use an eligible map.
-        NSArray *keys=[[track_definitions allKeys] sortedArrayUsingSelector:@selector(compare:)];
-        for(NSString *candidate in keys)if([track_definitions[candidate][key] boolValue]){alias=candidate;definition=track_definitions[candidate];break;}
-    }
-    if(![definition[key] boolValue])return nil;
     track_race_alias=alias;
     record([NSString stringWithFormat:@"local selected original track=%@ race_type=%u",alias,type]);return definition[@"path"];
 }

@@ -53,6 +53,8 @@ if args.enable_local_teams and not args.enable_local_tracks:
     parser.error('--enable-local-teams requires --enable-local-tracks')
 if args.enable_local_liveries and not args.enable_local_tracks:
     parser.error('--enable-local-liveries requires --enable-local-tracks')
+if args.enable_local_keyboard and not args.initialize_local_profile:
+    parser.error('--enable-local-keyboard requires --initialize-local-profile')
 if args.unlock_local_catalog and not args.initialize_local_profile:
     parser.error('--unlock-local-catalog requires --initialize-local-profile')
 if not 1 <= args.players <= 4 or not 0 <= args.ais <= 7 or args.players + args.ais > 8:

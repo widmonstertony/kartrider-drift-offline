@@ -1,7 +1,7 @@
 """Use the local garage preset in original solo-race equipment loading.
 
-Only player slot zero in the isolated debug account is eligible. AI keep their
-original equipment. Original SetItems, ApplyDesc, mesh loading and destruction
+The isolated debug account supplies its saved human preset and a fresh,
+compatible per-race AI roster. Original SetItems, ApplyDesc, mesh loading and destruction
 remain responsible for native descriptors and their allocations.
 """
 import argparse
@@ -36,7 +36,7 @@ add x20, sp, #{0x20+stack_offset}
 mov x0, x19
 bl .
 cbz x0, done
-add x1, x0, #0x98
+mov x1, x0
 mov x0, x20
 mov w2, #1
 bl .
@@ -51,43 +51,20 @@ def preset_bridge():
     return assemble('''
 stp x19, x30, [sp, #-0x20]!
 mov x19, x0
-ldr x8, [x19, #0xa0]
-cbz x8, failed
+mov x0, #-2
+adr x1, symbol
 bl .
-mov x1, x0
-ldr x0, [x19, #0xa0]
-ldr x8, [x0]
-ldr x8, [x8, #0x628]
-blr x8
-cbz x0, failed
-ldr w8, [x0, #0x168]
-cbnz w8, failed
-ldrb w8, [x0, #0x321]
-cbnz w8, failed
-bl .
-mov x1, x0
+cbz x0, done
+mov x16, x0
 mov x0, x19
-bl .
-cbz x0, failed
-ldr x8, [x0, #0x20]
-cbz x8, failed
-ldrb w9, [x8, #0x1a0]
-cmp w9, #1
-b.ne failed
-ldr x9, [x8, #0xa30]
-cbnz x9, failed
-ldr w9, [x0, #0xa0]
-cmp w9, #1
-b.lt failed
-cmp w9, #128
-b.gt failed
-b done
-failed:
-mov x0, #0
+blr x16
 done:
 ldp x19, x30, [sp], #0x20
 ret
-''', HELPER, [PAWN_CLASS, PRESET_CLASS, GET_SUBSYSTEM], [])
+symbol:
+.asciz "offline_race_preset"
+.p2align 2
+''', HELPER, [0x65B2448], [])
 
 
 def patch(source, destination):

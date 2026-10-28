@@ -129,7 +129,10 @@ static void lobby_controls_tick(uint64_t world) {
     NSArray *buttons=self.track?@[self.track,self.racers,self.back]:@[];
     for(UIButton *b in buttons)if(b.superview!=window&&window)[window addSubview:b];
     CGFloat x=MAX(12,window.safeAreaInsets.left+8),y=window.bounds.size.height-MAX(60,window.safeAreaInsets.bottom+48);
-    self.track.frame=CGRectMake(x,y,116,38);self.racers.frame=CGRectMake(x+124,y,94,38);self.back.frame=CGRectMake(x+226,y,116,38);
+    self.track.frame=CGRectMake(x,y,230,38);self.racers.frame=CGRectMake(x+238,y,70,38);self.back.frame=CGRectMake(x+316,y,100,38);
+    NSString *alias=track_saved_alias;NSDictionary *track=alias?track_definitions[alias]:nil;
+    NSString *modes=[track[@"speed"] boolValue]?([track[@"item"] boolValue]?@"竞速/道具":@"仅竞速"):@"仅道具";
+    [self.track setTitle:alias?[NSString stringWithFormat:@"%@ · %@",alias,modes]:@"选择赛道" forState:UIControlStateNormal];
     [self.racers setTitle:[NSString stringWithFormat:@"%d 人",atomic_load(&lobby_racer_count)] forState:UIControlStateNormal];
     self.track.hidden=!visible;self.racers.hidden=!visible;self.back.hidden=!visible||page!=24;
     for(UIButton *b in buttons)[window bringSubviewToFront:b];

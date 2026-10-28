@@ -54,6 +54,8 @@ def main():
         parser.error('--enable-local-teams requires --enable-local-tracks')
     if args.enable_local_liveries and not args.enable_local_tracks:
         parser.error('--enable-local-liveries requires --enable-local-tracks')
+    if args.enable_local_keyboard and not args.initialize_local_profile:
+        parser.error('--enable-local-keyboard requires --initialize-local-profile')
     if args.unlock_local_catalog and not args.initialize_local_profile:
         parser.error('--unlock-local-catalog requires --initialize-local-profile')
     if not re.fullmatch(r'[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+',args.bundle_id):

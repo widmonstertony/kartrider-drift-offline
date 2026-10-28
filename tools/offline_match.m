@@ -29,9 +29,15 @@ static BOOL match_verified(void) {
 static void match_tick(uint64_t world,uint64_t account) {
     if(!match_verified())return;
     uint64_t match=profile_subsystem(account+0x28,@"AccountMatch");unsigned char state=0;
-    if(!match||!probe_read(match+0x30,&state,1)||state!=1)return;
+    if(!match||!probe_read(match+0x30,&state,1))return;
+    unsigned char retry=0;
+#ifdef OFFLINE_LOCAL_TRACKS
+    retry=(unsigned char)atomic_exchange(&track_retry_mode,0);
+#endif
+    if(state!=1&&!retry)return;
     uint64_t modes=profile_u64(match+0x1e8);int32_t count=profile_i32(match+0x1f0);
     unsigned char first=0;
+    if(retry){modes=(uint64_t)&retry;count=1;}
     // Consume exactly once. A pending local request is original mutable game
     // state, not executable memory or a fabricated server packet.
     *(unsigned char *)(match+0x30)=0;
@@ -46,7 +52,7 @@ static void match_tick(uint64_t world,uint64_t account) {
     save_tick(preset);
     NSString *map=@"/Game/ART/Env/Theme_Village/village_I01/Village_I01";
 #ifdef OFFLINE_LOCAL_TRACKS
-    map=track_match_path(type);
+    map=track_match_path(type,first);
     if(!map){record(@"local match rejected unavailable selected track");return;}
 #endif
     // Native RaceMode values: speed solo/duo/squad=1/2/3, item=4/5/6.
@@ -62,6 +68,9 @@ static void match_tick(uint64_t world,uint64_t account) {
     racers=atomic_load(&lobby_racer_count);if(racers!=4&&racers!=8)return;
 #endif
     int ais=team?team_size*2-1:racers-1;
+#if defined(OFFLINE_UNLOCK_LOCAL_CATALOG) && defined(OFFLINE_LOCAL_UPGRADES)
+    if(!ai_prepare_roster(ais+1,preset)){record(@"local match rejected invalid AI appearance roster");return;}
+#endif
     NSString *kind=type==0?(team?@"SpeedTeamGameMode":@"SpeedSingleGameMode"):(team?@"ItemTeamGameMode":@"ItemSingleGameMode");
     NSString *options=[NSString stringWithFormat:@"game=/Script/KartDrift.%@?players=1?ais=%d?observers=0?team=%d",kind,ais,team?2:0];
     unichar map_text[256]={0},option_text[256]={0};

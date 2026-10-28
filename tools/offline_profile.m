@@ -54,6 +54,7 @@ static NSString *profile_string(uint64_t address) {
 }
 
 #ifdef OFFLINE_UNLOCK_LOCAL_CATALOG
+static NSDictionary *profile_item_parents;
 static NSArray *profile_catalog(uint64_t tables) {
     uint64_t data=profile_u64(tables+0x38),table=0;
     int32_t count=profile_i32(tables+0x40);if(count<1||count>128)return nil;
@@ -74,14 +75,16 @@ static NSArray *profile_catalog(uint64_t tables) {
     uint64_t row=profile_u64(profile_u64(table+0x30)+8),items=profile_u64(row+0x18);
     int32_t item_count=profile_i32(row+0x20);if(!row||!items||item_count<1||item_count>20000)return nil;
     NSMutableArray *result=[NSMutableArray arrayWithCapacity:item_count];
+    NSMutableDictionary *parents=[NSMutableDictionary dictionary];
     NSCharacterSet *invalid=[[NSCharacterSet characterSetWithCharactersInString:@"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789:_"] invertedSet];
     for(int32_t i=0;i<item_count;i++) {
         uint64_t entry=items+i*152;NSString *key=profile_string(entry+8);unsigned char type=0;
         if(!key||key.length>127||[key rangeOfCharacterFromSet:invalid].location!=NSNotFound||
            ![key containsString:@":"]||!probe_read(entry,&type,1)||type>6)return nil;
         [result addObject:@[key,@1,@(type)]];
+        parents[key]=profile_string(entry+0x20)?:@"";
     }
-    return result;
+    profile_item_parents=parents;return result;
 }
 #endif
 
@@ -104,6 +107,10 @@ static NSArray *profile_catalog(uint64_t tables) {
 #include "offline_lobby_controls.m"
 #endif
 #ifdef OFFLINE_LOCAL_MATCH
+#if defined(OFFLINE_UNLOCK_LOCAL_CATALOG) && defined(OFFLINE_LOCAL_UPGRADES)
+#include "offline_ai_roster.m"
+#endif
+#include "offline_race_equipment.m"
 #include "offline_match.m"
 #endif
 
