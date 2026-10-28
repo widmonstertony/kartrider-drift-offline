@@ -157,11 +157,17 @@ static void fit_catalyst_view(UIView *view,NSUInteger depth) {
 #ifdef OFFLINE_LOCAL_MENU
 #include "offline_menu.m"
 #endif
+#ifdef OFFLINE_LOCAL_PROFILE
+#include "offline_profile.m"
+#endif
 
 __attribute__((constructor)) static void begin_probe(void) {
     @autoreleasepool {
         record([NSString stringWithFormat:@"probe-v1 bundle=%@ home=%@",NSBundle.mainBundle.bundleIdentifier,NSHomeDirectory()]);
         restore_metadata();
+#ifdef OFFLINE_LOCAL_PROFILE
+        dispatch_async(dispatch_get_main_queue(),^{start_local_profile();});
+#endif
 #ifdef OFFLINE_LOCAL_MENU
         dispatch_async(dispatch_get_main_queue(),^{start_local_menu();});
 #endif

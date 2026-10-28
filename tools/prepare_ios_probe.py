@@ -22,6 +22,7 @@ parser.add_argument('--initialize-local-tables',action='store_true')
 parser.add_argument('--enable-local-replay',action='store_true')
 parser.add_argument('--enable-local-menu',action='store_true',help='Experimental local speed/item selection using original engine travel')
 parser.add_argument('--lobby-probe',action='store_true',help='Diagnostic original lobby with local debug account; original UI/profile flow remains incomplete')
+parser.add_argument('--initialize-local-profile',action='store_true',help='Experimental original initial inventory/equipment; does not implement saving')
 args=parser.parse_args()
 if not 1 <= args.players <= 4 or not 0 <= args.ais <= 7 or args.players + args.ais > 8:
     parser.error('Use 1–4 players and 0–7 AI, with at most 8 total racers')
@@ -37,6 +38,8 @@ if args.enable_local_menu and (not args.restore_local_results or not args.initia
     parser.error('--enable-local-menu requires solo results, original tables and a speed/item race')
 if args.lobby_probe and (not args.enable_commandline_map or not args.initialize_local_tables or args.players!=1 or args.map or args.enable_local_menu):
     parser.error('--lobby-probe requires map override, original tables, one player, and no --map/--enable-local-menu')
+if args.initialize_local_profile and not args.lobby_probe:
+    parser.error('--initialize-local-profile requires --lobby-probe')
 if args.map and (not args.map.startswith('/Game/') or any(c in args.map for c in '? \t\n\r')):
     parser.error('--map must be one original /Game/... path without URL options')
 ROOT=Path(__file__).resolve().parents[1]
@@ -106,6 +109,7 @@ if args.lobby_probe:
 (OUT/'ue4commandline.txt').write_text('../../../KartDrift/KartDrift.uproject '+selected_map+options+' -NoSplash -log -stdout -FullStdOutLogOutput ')
 subprocess.run(['xcrun','--sdk','iphoneos','clang','-arch','arm64','-miphoneos-version-min=15.0',
     '-dynamiclib','-fobjc-arc',*(['-DOFFLINE_LOCAL_MENU'] if args.enable_local_menu else []),
+    *(['-DOFFLINE_LOCAL_PROFILE'] if args.initialize_local_profile else []),
     '-framework','Foundation','-framework','UIKit','-framework','CoreGraphics',
     str(ROOT/'tools/offline_probe.m'),'-o',str(OUT/'OfflineProbe.dylib')],check=True)
 subprocess.run(['ldid','-S',str(OUT/'OfflineProbe.dylib')],check=True)
