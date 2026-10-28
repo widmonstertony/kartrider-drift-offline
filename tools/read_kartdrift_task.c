@@ -251,6 +251,21 @@ int main(int argc,char **argv) {
                     readmem(task,object+0xed6,&assist,1);readmem(task,object+0xedd,&auto_drive,1);
                     printf("MovementFlags assist=%u auto_drive=%u\n",assist,auto_drive);
                 }
+                if(!strcmp(classname,"MajorResultWidgetComponent")){
+                    uint64_t widget=0,provider=0,styler=0,style_table=0;
+                    uint16_t style_flags=0;
+                    readmem(task,object+0xc8,&widget,8);
+                    readmem(task,object+0xd8,&provider,8);
+                    readmem(task,object+0xe0,&styler,8);
+                    if(styler){
+                        readmem(task,styler,&style_table,8);
+                        readmem(task,styler+8,&style_flags,2);
+                    }
+                    printf("ResultWidget widget=0x%llx provider=0x%llx styler=0x%llx styler_table_main=0x%llx flags=0x%04x\n",
+                           (unsigned long long)widget,(unsigned long long)provider,
+                           (unsigned long long)styler,
+                           (unsigned long long)(style_table?style_table-slide:0),style_flags);
+                }
                 unsigned word_start=0,word_end=0;
                 if(!strcmp(classname,"MajorConnectRuleComponent")||!strcmp(classname,"RaceTimeComponent")){
                     word_start=0x100;word_end=0x158;

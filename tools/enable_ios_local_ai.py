@@ -6,7 +6,8 @@ selects the original AI pawn for slots at or above the parsed `players` count.
 It preserves the original spawning, AI controller and gameplay implementations.
 The same slot rule marks the original PawnState as AI. An optional experiment
 keeps the original FollowTG path driver when player assist settings are applied.
-This is an unverified diagnostic patch, not a complete offline race restoration.
+AI driving is verified on the retained test device; complete races are not yet
+verified. This diagnostic patch is not a complete offline race restoration.
 """
 import argparse
 import hashlib
