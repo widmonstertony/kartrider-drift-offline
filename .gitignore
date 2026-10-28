@@ -1,0 +1,17 @@
+# Publish source only. Local game files, credentials, reports and SDKs stay private.
+/*
+!/.gitignore
+!/README.md
+!/LICENSE
+!/requirements.txt
+!/requirements.json
+!/tools/
+/tools/*
+!/tools/*.py
+!/tools/*.c
+!/tools/*.m
+!/tools/*.plist
+/tools/assemble_device_probe.py
+/tools/assemble_device_probe_v2.py
+__pycache__/
+*.pyc

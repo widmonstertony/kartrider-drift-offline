@@ -1,0 +1,40 @@
+{
+  "game": "KartRider: Drift",
+  "preserved_client_version": "2.71.1",
+  "target_platforms": [
+    "iOS",
+    "macOS (Apple Silicon)",
+    "Android"
+  ],
+  "priority_platform": "iOS",
+  "acceptance": [
+    "Installs as an actual app on the target platform",
+    "Works locally without the discontinued production servers",
+    "Player can drive and drift in a solo race",
+    "Player can race against functioning AI opponents",
+    "Evidence of actual interactive gameplay, not just a splash screen or static asset view"
+  ],
+  "intermediate_milestone": "Load the retained iOS training map and establish local player control",
+  "preservation": "Keep original installed app and data; modify and test an independent copy",
+  "status": "In progress. No playable offline race has been verified. Training/tutorial only is insufficient.",
+  "mandatory_modes": [
+    {
+      "mode": "竞速赛",
+      "offline": true,
+      "multiple_ai_opponents": true,
+      "playable_race_to_finish": true
+    },
+    {
+      "mode": "道具赛",
+      "offline": true,
+      "multiple_ai_opponents": true,
+      "working_items": true,
+      "playable_race_to_finish": true
+    },
+    {
+      "mode": "单人驾驶",
+      "offline": true,
+      "drive_and_drift": true
+    }
+  ]
+}
