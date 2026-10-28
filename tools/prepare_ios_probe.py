@@ -38,7 +38,7 @@ if args.enable_commandline_map:
 ent={'application-identifier':BUNDLE,'get-task-allow':True}
 with (OUT/'entitlements.plist').open('wb') as f:plistlib.dump(ent,f)
 subprocess.run(['ldid','-S'+str(OUT/'entitlements.plist'),str(OUT/'KartDrift')],check=True)
-(OUT/'ue4commandline.txt').write_text('../../../KartDrift/KartDrift.uproject /Game/ART/Env/Stage_License/License_T01/License_T01?game=/Script/KartDrift.LicenseGameMode?License=L00 -NoSplash -log -stdout -FullStdOutLogOutput ')
+(OUT/'ue4commandline.txt').write_text('../../../KartDrift/KartDrift.uproject /Game/ART/Env/Stage_License/License_T01/License_T01?game=/Script/KartDrift.LicenseGameMode?License=L00?players=1 -NoSplash -log -stdout -FullStdOutLogOutput ')
 shutil.copy2(ROOT/'tools/OfflineProbe.dylib',OUT/'OfflineProbe.dylib')
 frameworks=ROOT/'runtime/ios-original/KartDrift.app/Frameworks'
 for source in frameworks.rglob('*'):

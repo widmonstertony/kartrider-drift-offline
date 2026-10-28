@@ -1,26 +1,123 @@
-/* Read-only snapshot of the installed KartDrift process's encrypted page. */
+/* Read-only snapshots of the user's preserved iOS 2.71.1 KartDrift process. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/sysctl.h>
 #include <mach/mach.h>
 #include <mach-o/loader.h>
+#include <mach/arm/thread_status.h>
 
 static int readmem(task_t task, uint64_t addr, void *out, size_t size) {
     vm_size_t got=0;
     kern_return_t k=vm_read_overwrite(task,(vm_address_t)addr,size,(vm_address_t)out,&got);
     return k==KERN_SUCCESS && got==size;
 }
+static void fname(task_t task,uint64_t slide,uint64_t address,char *out,size_t capacity){
+    uint32_t name[2]={0};uint64_t block=0;uint16_t header=0;
+    snprintf(out,capacity,"?");
+    if(!address||!readmem(task,address,name,8))return;
+    if(!readmem(task,slide+0x108837ec0ULL+0xd0+(name[0]>>16)*8,&block,8))return;
+    uint64_t entry=block+(name[0]&65535)*2;
+    if(!readmem(task,entry,&header,2))return;
+    size_t length=header>>6;
+    if(!length||length>=capacity||length>1023)return;
+    if(header&1){
+        uint16_t text[1024]={0};if(!readmem(task,entry+2,text,length*2))return;
+        for(size_t i=0;i<length;i++)out[i]=text[i]<128?(char)text[i]:'?';
+    }else if(!readmem(task,entry+2,out,length))return;
+    out[length]=0;
+    if(name[1])snprintf(out+length,capacity-length,"_%u",name[1]-1);
+}
+static void objectname(task_t task,uint64_t slide,uint64_t object,char *out,size_t capacity){
+    fname(task,slide,object?object+0x18:0,out,capacity);
+}
+static void owned_components(task_t task,uint64_t slide,uint64_t actor){
+    uint64_t data=0;int count=0;
+    if(!readmem(task,actor+0x1a0,&data,8)||!readmem(task,actor+0x1a8,&count,4)||count<0||count>4096)return;
+    printf("Owned component slots=%d\n",count);
+    for(int i=0;i<count;i++){
+        uint64_t value=0,cls=0,meta=0,outer=0;char name[1024]={0},kind[1024]={0},metaname[1024]={0};
+        if(!readmem(task,data+i*16,&value,8)||!value||!readmem(task,value+0x10,&cls,8)||!readmem(task,cls+0x10,&meta,8))continue;
+        objectname(task,slide,meta,metaname,sizeof(metaname));if(!strstr(metaname,"Class"))continue;
+        objectname(task,slide,cls,kind,sizeof(kind));objectname(task,slide,value,name,sizeof(name));readmem(task,value+0x20,&outer,8);
+        printf("  Owned[%d] %s:%s object=0x%llx outer=0x%llx\n",i,name,kind,(unsigned long long)value,(unsigned long long)outer);
+    }
+}
+static int structure_depth=0;
+static void properties(task_t task,uint64_t slide,uint64_t object,uint64_t cls){
+    for(int depth=0;depth<8&&cls;depth++){
+        char classname[1024]={0};uint64_t field=0,super=0;
+        objectname(task,slide,cls,classname,sizeof(classname));
+        readmem(task,cls+0x40,&super,8);readmem(task,cls+0x50,&field,8);
+        printf("Class %s\n",classname);
+        if(!strcmp(classname,"Actor"))owned_components(task,slide,object);
+        for(int i=0;i<400&&field;i++){
+            char name[1024]={0},kind[1024]={0};uint64_t type=0,next=0;int offset=0;
+            fname(task,slide,field+0x28,name,sizeof(name));
+            readmem(task,field+8,&type,8);fname(task,slide,type,kind,sizeof(kind));
+            readmem(task,field+0x4c,&offset,4);readmem(task,field+0x20,&next,8);
+            printf("  Property %s type=%s offset=0x%x",name,kind,offset);
+            if(offset>=0&&offset<0x10000&&!strcmp(kind,"BoolProperty")){
+                unsigned char layout[4]={0},byte=0;readmem(task,field+0x78,layout,4);
+                readmem(task,object+offset+layout[1],&byte,1);
+                printf(" raw=0x%02x mask=0x%02x value=%d",byte,layout[3],!!(byte&layout[3]));
+            }
+            if(offset>=0&&offset<0x10000&&(!strcmp(kind,"StructProperty")||!strcmp(kind,"SoftObjectProperty")||!strcmp(kind,"SoftClassProperty"))){
+                uint64_t words[6]={0};readmem(task,object+offset,words,sizeof(words));
+                printf(" raw=");for(int w=0;w<6;w++)printf(" %llx",(unsigned long long)words[w]);
+                if(!strcmp(kind,"SoftObjectProperty")||!strcmp(kind,"SoftClassProperty")){
+                    char path[1024]={0};fname(task,slide,object+offset+0x10,path,sizeof(path));
+                    printf(" assetPath=%s",path);
+                }
+                if(!strcmp(kind,"StructProperty")){
+                    uint64_t structure=0;char sn[1024]={0};readmem(task,field+0x78,&structure,8);
+                    objectname(task,slide,structure,sn,sizeof(sn));printf(" struct=%s(0x%llx)",sn,(unsigned long long)structure);
+                    if(structure_depth<2&&(!strcmp(sn,"KartDesc")||!strcmp(sn,"CharacterDesc")||!strcmp(sn,"RacePlayerEquipDesc"))){putchar('\n');structure_depth++;properties(task,slide,object+offset,structure);structure_depth--;}
+                }
+            }
+            if(offset>=0&&offset<0x10000&&!strcmp(kind,"ObjectProperty")){
+                uint64_t value=0;char value_name[1024]={0};readmem(task,object+offset,&value,8);
+                objectname(task,slide,value,value_name,sizeof(value_name));printf(" value=%s(0x%llx)",value_name,(unsigned long long)value);
+            }
+            if(offset>=0&&offset<0x10000&&!strcmp(kind,"StrProperty")){
+                uint64_t data=0;int length=0;uint16_t text[256]={0};
+                readmem(task,object+offset,&data,8);readmem(task,object+offset+8,&length,4);
+                if(data&&length>0&&length<256&&readmem(task,data,text,length*2)){
+                    printf(" value=\"");for(int c=0;c<length&&text[c];c++)putchar(text[c]<128?text[c]:'?');putchar('"');
+                }
+            }
+            if(offset>=0&&offset<0x10000&&!strcmp(kind,"ArrayProperty")){
+                uint64_t data=0;int length=0;
+                readmem(task,object+offset,&data,8);readmem(task,object+offset+8,&length,4);
+                printf(" data=0x%llx count=%d",(unsigned long long)data,length);
+                /* Only label entries that resolve to a valid UObject class and name. */
+                if(data&&length>0&&length<=1000)for(int a=0;a<length&&a<40;a++){
+                    uint64_t value=0,valueclass=0;char vn[1024]={0},vc[1024]={0};
+                    if(!readmem(task,data+a*8,&value,8)||!value||!readmem(task,value+0x10,&valueclass,8))continue;
+                    objectname(task,slide,valueclass,vc,sizeof(vc));objectname(task,slide,value,vn,sizeof(vn));
+                    if(strcmp(vc,"?")&&strcmp(vn,"?"))printf(" [%d]=%s:%s(0x%llx)",a,vn,vc,(unsigned long long)value);
+                }
+            }
+            if(offset>=0&&offset<0x10000&&(!strcmp(kind,"FloatProperty")||!strcmp(kind,"IntProperty"))){
+                union {float f;int i;} value={0};readmem(task,object+offset,&value,4);
+                if(!strcmp(kind,"FloatProperty"))printf(" value=%g",value.f);else printf(" value=%d",value.i);
+            }
+            putchar('\n');if(next==field)break;field=next;
+        }
+        cls=super;
+    }
+}
 int main(int argc,char **argv) {
-    if(argc<2){fprintf(stderr,"Usage: %s <decrypted-page-output>|--inspect\n",argv[0]);return 1;}
-    int inspect=!strcmp(argv[1],"--inspect");
+    if(argc<2){fprintf(stderr,"Usage: %s <decrypted-page-output>|--inspect|--threads\n",argv[0]);return 1;}
+    int threads=!strcmp(argv[1],"--threads");
+    int inspect=threads||!strcmp(argv[1],"--inspect");
     int mib[4]={CTL_KERN,KERN_PROC,KERN_PROC_ALL,0}; size_t size=0;
     if(sysctl(mib,4,NULL,&size,NULL,0)) {perror("sysctl size");return 1;}
     struct kinfo_proc *processes=malloc(size);
     if(sysctl(mib,4,processes,&size,NULL,0)) {perror("sysctl list");return 1;}
     pid_t pid=0;
     for(size_t i=0;i<size/sizeof(*processes);i++)
-        if(!strcmp(processes[i].kp_proc.p_comm,"KartDrift"))pid=processes[i].kp_proc.p_pid;
+        if(!strcmp(processes[i].kp_proc.p_comm,"KartDrift")&&processes[i].kp_proc.p_pid>pid)pid=processes[i].kp_proc.p_pid;
     free(processes);
     if(!pid){puts("KartDrift is not running");return 2;}
     task_t task=MACH_PORT_NULL; kern_return_t k=task_for_pid(mach_task_self(),pid,&task);
@@ -72,6 +169,80 @@ int main(int argc,char **argv) {
             printf("FCommandLine ASCII: ");
             for(int i=0;i<2047&&command[i];i++)putchar(command[i]<128?(char)command[i]:'?');
             putchar('\n');
+        }
+        uint64_t engine=0,contexts=0;int context_count=0;
+        if(readmem(task,slide+0x108b0b288ULL,&engine,8)&&engine){
+            readmem(task,engine+0xc48,&contexts,8);
+            readmem(task,engine+0xc50,&context_count,4);
+            printf("GEngine=0x%llx contexts=%d\n",(unsigned long long)engine,context_count);
+            if(context_count>0&&context_count<16)for(int i=0;i<context_count;i++){
+                uint64_t context=0,world=0,level=0;uint32_t name[2]={0};
+                readmem(task,contexts+i*8,&context,8);
+                readmem(task,context+0x280,&world,8);
+                if(world){
+                    readmem(task,world+0x18,name,8);
+                    readmem(task,world+0x30,&level,8);
+                }
+                char worldname[1024]={0};objectname(task,slide,world,worldname,sizeof(worldname));
+                printf("World[%d]=0x%llx name=%s FName=%08x:%08x level=0x%llx\n",i,(unsigned long long)world,worldname,name[0],name[1],(unsigned long long)level);
+                uint64_t worldclass=0;readmem(task,world+0x10,&worldclass,8);properties(task,slide,world,worldclass);
+                uint64_t actors=0;int actor_count=0;
+                if(level){readmem(task,level+0x98,&actors,8);readmem(task,level+0xa0,&actor_count,4);}
+                printf("Actors=%d\n",actor_count);
+                if(actor_count>0&&actor_count<10000)for(int a=0;a<actor_count;a++){
+                    uint64_t actor=0,cls=0;char actorname[1024]={0},classname[1024]={0};
+                    if(!readmem(task,actors+a*8,&actor,8)||!actor)continue;
+                    objectname(task,slide,actor,actorname,sizeof(actorname));
+                    readmem(task,actor+0x10,&cls,8);objectname(task,slide,cls,classname,sizeof(classname));
+                    if(a<3||strstr(classname,"Kart")||strstr(classname,"Controller")||strstr(classname,"GameMode")||strstr(classname,"GameState")||strstr(classname,"License")||strstr(classname,"Camera")||strstr(classname,"Pawn"))
+                        printf("Actor[%d] %s class=%s address=0x%llx\n",a,actorname,classname,(unsigned long long)actor);
+                    if(!strcmp(classname,"LicensePawn")||!strcmp(classname,"LicenseGameState")||!strcmp(classname,"LicenseGameMode")||!strcmp(classname,"KdPlayerController")||strstr(classname,"Camera"))properties(task,slide,actor,cls);
+                }
+            }
+        }
+        if(argc>2){
+            uint64_t object=strtoull(argv[2],NULL,0),cls=0;char name[1024]={0};
+            if(object&&readmem(task,object+0x10,&cls,8)){
+                objectname(task,slide,object,name,sizeof(name));printf("Requested object %s 0x%llx\n",name,(unsigned long long)object);properties(task,slide,object,cls);
+                uint64_t table=0;char classname[1024]={0};
+                objectname(task,slide,cls,classname,sizeof(classname));
+                /* The inspected class tables are independently known to exceed
+                   this window. Do not walk beyond arbitrary UObject tables. */
+                if((!strcmp(classname,"KdAssetManager")||!strcmp(classname,"KartSkeletalMeshComponent"))&&
+                   readmem(task,object,&table,8))for(unsigned offset=0;offset<0x400;offset+=8){
+                    uint64_t entry=0;
+                    if(readmem(task,table+offset,&entry,8)&&entry>=main_load&&entry<main_load+0x9000000ULL)
+                        printf("VTable +0x%x main=0x%llx\n",offset,(unsigned long long)(entry-slide));
+                }
+            }
+        }
+        if(threads){
+            thread_act_array_t list=NULL;mach_msg_type_number_t total=0;
+            k=task_threads(task,&list,&total);
+            printf("task_threads=%d count=%u\n",k,total);
+            if(k==KERN_SUCCESS){
+                for(unsigned i=0;i<total;i++){
+                    arm_thread_state64_t state={0};
+                    mach_msg_type_number_t length=ARM_THREAD_STATE64_COUNT;
+                    k=thread_get_state(list[i],ARM_THREAD_STATE64,(thread_state_t)&state,&length);
+                    if(k==KERN_SUCCESS){
+                        uint64_t pc=arm_thread_state64_get_pc(state),lr=arm_thread_state64_get_lr(state),fp=arm_thread_state64_get_fp(state);
+                        printf("Thread %u pc=0x%llx lr=0x%llx\n",i,(unsigned long long)pc,(unsigned long long)lr);
+                        for(unsigned depth=0;depth<28&&fp;depth++){
+                            uint64_t frame[2]={0};
+                            if(!readmem(task,fp,frame,sizeof(frame)))break;
+                            uint64_t ret=frame[1]&0x0000000fffffffffULL;
+                            printf("  #%u lr=0x%llx",depth,(unsigned long long)ret);
+                            if(ret>=main_load&&ret<main_load+0x9000000ULL)printf(" main=0x%llx",(unsigned long long)(ret-slide));
+                            putchar('\n');
+                            if(frame[0]<=fp||frame[0]-fp>0x100000)break;
+                            fp=frame[0];
+                        }
+                    }
+                    mach_port_deallocate(mach_task_self(),list[i]);
+                }
+                vm_deallocate(mach_task_self(),(vm_address_t)list,total*sizeof(thread_t));
+            }
         }
         mach_port_deallocate(mach_task_self(),task);return 0;
     }

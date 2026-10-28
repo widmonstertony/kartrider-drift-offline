@@ -28,6 +28,12 @@ static void restore_metadata(void) {
     }
 }
 
+static void describe_view(UIView *view,NSUInteger depth) {
+    if(depth>12)return;
+    record([NSString stringWithFormat:@"view depth=%lu class=%@ frame=%@ hidden=%d alpha=%.2f layer=%@",(unsigned long)depth,NSStringFromClass(view.class),NSStringFromCGRect(view.frame),view.hidden,view.alpha,NSStringFromClass(view.layer.class)]);
+    for(UIView *child in view.subviews)describe_view(child,depth+1);
+}
+
 __attribute__((constructor)) static void begin_probe(void) {
     @autoreleasepool {
         record([NSString stringWithFormat:@"probe-v1 bundle=%@ home=%@",NSBundle.mainBundle.bundleIdentifier,NSHomeDirectory()]);
@@ -39,6 +45,7 @@ __attribute__((constructor)) static void begin_probe(void) {
             if([delegate respondsToSelector:NSSelectorFromString(@"bEngineInit")]) engine=((BOOL(*)(id,SEL))objc_msgSend)(delegate,NSSelectorFromString(@"bEngineInit"));
             if([delegate respondsToSelector:NSSelectorFromString(@"bCommandLineReady")]) command=((BOOL(*)(id,SEL))objc_msgSend)(delegate,NSSelectorFromString(@"bCommandLineReady"));
             record([NSString stringWithFormat:@"t=%d delegate=%@ engine=%d command=%d windows=%@",delay,NSStringFromClass([delegate class]),engine,command,UIApplication.sharedApplication.windows]);
+            if(delay==31)for(UIWindow *window in UIApplication.sharedApplication.windows)describe_view(window,0);
         });
     }
 }

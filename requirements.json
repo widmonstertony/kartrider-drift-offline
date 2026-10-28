@@ -16,7 +16,7 @@
   ],
   "intermediate_milestone": "Load the retained iOS training map and establish local player control",
   "preservation": "Keep original installed app and data; modify and test an independent copy",
-  "status": "Original-client route resumed after user correction. The separate self-written prototype is not an accepted restoration. Original Drift clone still blocks on startup/network error 80099; no original-client offline race has been verified.",
+  "status": "The preserved original Drift iOS engine loads License_T01 with 11 level layers. Explicit players=1 produces original free-practice HUD and driving/camera/drift/audio components. A guarded primary-asset loading patch resolves Kartbody_Practice; the skeletal mesh remains null and the scene/camera is abnormal. A separately guarded mesh-loading call is under device validation. No controllable original-client driving or AI race has been verified. Android 2.71.1 with 5 APK splits and 26 cached PAKs is backed up with matching hashes; its native libUE4 matches the analysis binary. The unchanged Android client stops at network error 80002. The 2004 PC demo is preserved and static analysis started; no native mobile/macOS port is verified.",
   "implementation": {
     "source": "Reverse engineer and modify the preserved original client; do not substitute a newly written kart game. Write our analysis and patch tooling ourselves.",
     "allowed_research": "Study publicly described principles and validate behavior; implement our own code",
