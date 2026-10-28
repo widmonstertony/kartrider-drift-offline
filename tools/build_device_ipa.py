@@ -50,5 +50,6 @@ rm -rf Payload/KartDrift.app/SC_Info Payload/KartDrift.app/_CodeSignature
     if result.get('error') or result.get('result',{}).get('isError'):raise RuntimeError(str(result))
     print('Assembly started. Read assemble.log and assemble.exit in',str(work))
     print('Diagnostic IPA:',str(work/'offline-probe.ipa'))
+    print('After downloading a large device-built IPA, use repack_large_ipa.py to produce and verify ZIP64 output; older device zip tools can wrap offsets past 4 GiB.')
 
 if __name__=='__main__':main()
