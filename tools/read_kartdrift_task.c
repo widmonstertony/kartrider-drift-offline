@@ -283,6 +283,23 @@ int main(int argc,char **argv) {
                 objectname(task,slide,object,name,sizeof(name));printf("Requested object %s 0x%llx\n",name,(unsigned long long)object);properties(task,slide,object,cls);
                 uint64_t table=0;char classname[1024]={0};
                 objectname(task,slide,cls,classname,sizeof(classname));
+                if(!strcmp(classname,"KdGameInstance")){
+                    // Bounded read-only discovery of the retained game's
+                    // native subsystem collection; validate every object/class.
+                    for(unsigned off=0x80;off<0x1a8;off+=8){
+                        uint64_t entries=0;int count=0;
+                        if(!readmem(task,object+off+0x10,&entries,8)||!entries||
+                           !readmem(task,object+off+0x18,&count,4)||count<1||count>64)continue;
+                        for(int i=0;i<count;i++){
+                            uint64_t subcls=0,sub=0,actual=0;char cn[1024]={0};
+                            if(!readmem(task,entries+i*24,&subcls,8)||!subcls||
+                               !readmem(task,entries+i*24+8,&sub,8)||!sub||
+                               !readmem(task,sub+0x10,&actual,8)||actual!=subcls)continue;
+                            objectname(task,slide,subcls,cn,sizeof(cn));
+                            if(strcmp(cn,"?"))printf("GameInstance subsystem collection=+0x%x %s object=0x%llx\n",off,cn,(unsigned long long)sub);
+                        }
+                    }
+                }
                 if(!strcmp(classname,"FollowTGMoveComponent")){
                     uint8_t racing=0,drift=0;
                     readmem(task,object+0xb0,&racing,1);readmem(task,object+0x128,&drift,1);

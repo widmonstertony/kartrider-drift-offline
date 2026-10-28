@@ -11,10 +11,13 @@ from pathlib import Path
 from enable_ios_local_match import assemble
 from enable_ios_local_results import branch
 
-BRIDGES = ((0x2DDBFC8, 0x3E00, 0), (0x2DDBE6C, 0x3F00, 1))
+BRIDGES = ((0x2DDBFC8, 0x3E00, 0), (0x2DDBE6C, 0x3F00, 1),
+           (0x2DDC954, 0x4100, 2))
 RANGES = (
     (0x2DDBFC8, 0x2DDC120, '0a3e19c61c95cc98cf9f6103c44189456fba889325ff9bbc5902a0f1ac7ba963'),
     (0x2DDBE6C, 0x2DDBFBC, 'ba1d662d17610beb6eb5165c3a6ef405bb64fec83964198a5e57be022afd8e16'),
+    (0x2DDC954, 0x2DDCAD4, '377a5f4137762e50e2878d5782f53c3dd407d8fb1dc0d4d8845d22f28784ec93'),
+    (0x2E251AC, 0x2E252C8, '5050329cfff76bd406991300f06f420e04c41488cf2ba99e10b73734a4ab4b5e'),
 )
 
 
@@ -86,6 +89,25 @@ def patch(source, destination):
             raise ValueError('Required track bridge padding is unavailable')
         data[entry:entry+4] = branch(entry, cave)
         data[cave:cave+len(code)] = code
+    # The original profile asks for name-change information even when no
+    # server exists, then dereferences the null requester. Local accounts have
+    # no remote rename history; preserve the original path for other accounts.
+    entry,cave=0x2E251AC,0x4200
+    code=assemble('''
+ldrb w8, [x0, #0x1a0]
+cmp w8, #1
+b.ne original
+ldr x8, [x0, #0xa30]
+cbnz x8, original
+ret
+original:
+sub sp, sp, #0x80
+b .
+''',cave,[],[entry+4])
+    if any(data[cave:cave+0x100]):
+        raise ValueError('Profile guard bridge padding is unavailable')
+    data[entry:entry+4]=branch(entry,cave)
+    data[cave:cave+len(code)]=code
     destination.write_bytes(data)
     return {'runtime_verified': False, 'requires_resigning': True,
             'sha256': hashlib.sha256(data).hexdigest()}

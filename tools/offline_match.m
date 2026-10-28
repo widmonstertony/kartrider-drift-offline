@@ -9,7 +9,9 @@ static BOOL match_verified(void) {
     struct {uint64_t offset;size_t size;const char *digest;} checks[]={
         {0x5ab8d20,0x40,"c143e3496716b5986c1c03eaedc6f7f177d62abb532377f05e97ed107284735f"},
         {0x2821af4,0x80,"9c03ab5b50ef0439fa233a1c6229670b45b5d529e066de2088d24361bb173071"},
-        {0x2d7262c,0x114,"eae563b1f03155fef05204cec6deefceb2617b635dbe9197e81179ca04c481b6"}
+        {0x2d7262c,0x114,"eae563b1f03155fef05204cec6deefceb2617b635dbe9197e81179ca04c481b6"},
+        {0x2e80668,0x40,"4989659cf1dde1055f9b2be89f88c39dca7be0733a3fd6f490413768a19fce51"},
+        {0x2e82060,0x118,"9f3f1cf4307a8f3f1fa64f136d6f50cfcbcbc3d4064cca008ff6e20caa76e9a0"}
     };
     for(unsigned i=0;i<sizeof(checks)/sizeof(checks[0]);i++) {
         unsigned char data[512],digest[CC_SHA256_DIGEST_LENGTH];char hex[65]={0};
@@ -58,5 +60,20 @@ static void match_tick(uint64_t world,uint64_t account) {
     struct LocalMatchString option_value={option_text,(int32_t)options.length+1,(int32_t)options.length+1};
     uint64_t name=((uint64_t(*)(const void *))(slide+0x105ab8d20ULL))(&map_value);
     record([NSString stringWithFormat:@"original Play local travel mode=%@ selected_modes=%d first_mode=%u players=1 ais=3 NetDriver=0",kind,count,first]);
+#ifdef OFFLINE_LOCAL_TRACKS
+    uint64_t traveler=profile_subsystem(profile_u64(world+0x180)+0xe0,@"KdTraveler");
+    if(traveler&&track_race_alias) {
+        // The original travel path owns its loading widget, transition, async
+        // preload handles and eventual OpenLevel. Direct OpenLevel leaves the
+        // old matching screen frozen throughout the first asset/Metal load.
+        NSString *mode=type==0?@"SpeedSingle":@"ItemSingle";
+        unsigned char mode_string[16]={0},alias_string[16]={0};
+        NSMutableArray *storage=[NSMutableArray array];
+        save_fstring(mode_string,mode,storage);save_fstring(alias_string,track_race_alias,storage);
+        BOOL accepted=((BOOL(*)(void *,const void *,const void *,uint64_t,BOOL,const void *,BOOL))(slide+0x102e80668ULL))((void *)traveler,mode_string,alias_string,name,YES,&option_value,YES);
+        record([NSString stringWithFormat:@"original local loading transition accepted=%d",accepted]);
+        if(accepted)return;
+    }
+#endif
     ((void(*)(void *,uint64_t,BOOL,const void *))(slide+0x1059ecfd0ULL))((void *)world,name,YES,&option_value);
 }

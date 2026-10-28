@@ -49,8 +49,12 @@ public class DecompileTargets extends GhidraScript {
                     for (Address target : instruction.getFlows()) {
                         if (!body.contains(target) && getFunctionAt(target) == null &&
                             currentProgram.getMemory().contains(target)) {
-                            currentProgram.getFunctionManager().createFunction(null, target,
-                                new AddressSet(target), SourceType.ANALYSIS);
+                            // An existing enclosing function can own this label.
+                            // Leave it intact; a helper target must not abort the
+                            // independently requested function's decompilation.
+                            if (currentProgram.getFunctionManager().getFunctionContaining(target) == null)
+                                currentProgram.getFunctionManager().createFunction(null, target,
+                                    new AddressSet(target), SourceType.ANALYSIS);
                         }
                     }
                 }

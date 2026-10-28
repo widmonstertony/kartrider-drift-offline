@@ -5,6 +5,9 @@ static NSDictionary *track_definitions;
 static uint64_t track_account,track_time_attack;
 static NSThread *track_game_thread;
 static NSString *track_saved_alias;
+static NSString *track_race_alias;
+static unsigned track_pending_requests;
+static void track_complete_request(int kind);
 
 static NSString *track_save_path(void) {
     return [NSHomeDirectory() stringByAppendingPathComponent:@"Documents/offline-track.json"];
@@ -67,6 +70,10 @@ static BOOL track_initialize(uint64_t account,uint64_t tables) {
 }
 static void track_tick(void) {
     if(!track_local(track_time_attack))return;
+    // Original widgets set their waiting state after making a request. Deliver
+    // the local result on the next game tick, like the original async response.
+    unsigned pending=track_pending_requests;track_pending_requests=0;
+    for(int kind=0;kind<3;kind++)if(pending&(1u<<kind))track_complete_request(kind);
     NSString *alias=profile_string(track_time_attack+0x98);
     if(!alias||!track_definitions[alias]||[alias isEqualToString:track_saved_alias])return;
     NSDictionary *document=@{@"schema":@1,@"alias":alias};NSData *data=[NSJSONSerialization dataWithJSONObject:document options:NSJSONWritingSortedKeys error:nil];
@@ -80,16 +87,20 @@ static NSString *track_match_path(uint8_t type) {
         alias=track_saved_alias;definition=alias?track_definitions[alias]:nil;
     }
     if(![definition[key] boolValue]) {
+        alias=@"Village_I01";definition=track_definitions[alias];
+    }
+    if(![definition[key] boolValue]) {
         // A speed-only track has no original item layout. Use an eligible map.
         NSArray *keys=[[track_definitions allKeys] sortedArrayUsingSelector:@selector(compare:)];
         for(NSString *candidate in keys)if([track_definitions[candidate][key] boolValue]){alias=candidate;definition=track_definitions[candidate];break;}
     }
     if(![definition[key] boolValue])return nil;
+    track_race_alias=alias;
     record([NSString stringWithFormat:@"local selected original track=%@ race_type=%u",alias,type]);return definition[@"path"];
 }
 // Synchronous native multicast invocation. Locking/compaction follow the
 // retained delegate layout so callbacks may remove themselves safely.
-static void track_broadcast(uint64_t delegate,const void *value,BOOL integer) {
+static void track_broadcast(uint64_t delegate,const void *value,int argument) {
     int32_t count=profile_i32(delegate+8),lock=profile_i32(delegate+0x14);
     if(count<0||count>512||lock<0||lock>1024)return;
     *(int32_t *)(delegate+0x14)=lock+1;BOOL compact=NO;
@@ -98,7 +109,7 @@ static void track_broadcast(uint64_t delegate,const void *value,BOOL integer) {
         if(!array||!object||!profile_i32(slot+8)){compact=YES;continue;}
         uint64_t function=profile_u64(profile_u64(object)+0x58);
         if(!function){compact=YES;continue;}
-        BOOL alive=integer?((BOOL(*)(void *,int32_t))function)((void *)object,0):((BOOL(*)(void *,const void *))function)((void *)object,value);
+        BOOL alive=argument==2?((BOOL(*)(void *))function)((void *)object):argument==1?((BOOL(*)(void *,int32_t))function)((void *)object,0):((BOOL(*)(void *,const void *))function)((void *)object,value);
         if(!alive)compact=YES;
     }
     *(int32_t *)(delegate+0x14)=profile_i32(delegate+0x14)-1;
@@ -106,7 +117,19 @@ static void track_broadcast(uint64_t delegate,const void *value,BOOL integer) {
 }
 __attribute__((visibility("default")))
 void offline_track_request(uint64_t subsystem,int kind) {
-    if(!track_local(subsystem))return;
+    if(!track_local(subsystem)||kind<0||kind>2)return;
+    track_pending_requests|=1u<<kind;
+}
+static void track_complete_request(int kind) {
+    uint64_t subsystem=track_time_attack;
+    if(kind==2){
+        // A new local profile has no remote seasonal rankings. Mark its empty
+        // native record set ready and notify the original page's subscribers.
+        *(unsigned char *)(subsystem+0xa8)=1;
+        track_broadcast(subsystem+0x30,NULL,2);
+        track_broadcast(subsystem+0x48,NULL,2);
+        record(@"original time attack records ready locally; no remote rankings");return;
+    }
     if(kind==1){track_broadcast(subsystem+0x78,NULL,YES);record(@"original track preparation completed locally");return;}
     NSMutableArray *storage=[NSMutableArray array];NSArray *aliases=[[track_definitions allKeys] sortedArrayUsingSelector:@selector(compare:)];
     NSMutableData *entries=[NSMutableData dataWithLength:aliases.count*16];

@@ -4,6 +4,7 @@
    OFFLINE_LOCAL_SAVES adds local preset persistence using original interfaces.
    The garage interface remains the original client's own widgets. */
 #import <CommonCrypto/CommonDigest.h>
+#import <stdatomic.h>
 
 static BOOL profile_verified(void) {
     static int verified=-1;
@@ -187,13 +188,16 @@ static void profile_initialize(void) {
 }
 
 static void start_local_profile(void) {
+    static atomic_bool queued=false;
     NSTimeInterval interval=2;
 #ifdef OFFLINE_LOCAL_SAVES
     interval=0.25;
 #endif
     [NSTimer scheduledTimerWithTimeInterval:interval repeats:YES block:^(NSTimer *timer){
-        if(!profile_verified())return;
-        BOOL (^task)(void)=^BOOL {@autoreleasepool {profile_initialize();}return YES;};
+        if(UIApplication.sharedApplication.applicationState!=UIApplicationStateActive||!profile_verified()||atomic_exchange(&queued,true))return;
+        // A slow original asset load must not accumulate thousands of queued
+        // profile jobs. Allow one pending game-thread job at a time.
+        BOOL (^task)(void)=^BOOL {@autoreleasepool {profile_initialize();}atomic_store(&queued,false);return YES;};
         ((void(*)(id,SEL,id))objc_msgSend)(NSClassFromString(@"FIOSAsyncTask"),NSSelectorFromString(@"CreateTaskWithBlock:"),task);
     }];
 }
