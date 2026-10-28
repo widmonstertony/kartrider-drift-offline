@@ -4,6 +4,7 @@
 #import <objc/runtime.h>
 #import <mach/mach.h>
 #import <mach-o/dyld.h>
+#import <mach-o/loader.h>
 #import <mach/arm/thread_status.h>
 #import <TargetConditionals.h>
 
@@ -12,9 +13,27 @@ static BOOL probe_read(uint64_t address,void *value,size_t size) {
     return address && vm_read_overwrite(mach_task_self(),address,size,(vm_address_t)value,&received)==KERN_SUCCESS && received==size;
 }
 
+static uint64_t probe_slide(void) {
+    // An injected bootstrap can occupy image index zero on the test device.
+    // Locate this app's executable; never derive game addresses from a dylib.
+    static uint64_t result=UINT64_MAX;
+    if(result!=UINT64_MAX)return result;
+    NSString *executable=[NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleExecutable"];
+    for(uint32_t i=0;i<_dyld_image_count();i++) {
+        const struct mach_header *header=_dyld_get_image_header(i);
+        const char *path=_dyld_get_image_name(i);
+        if(!header || !path || header->magic!=MH_MAGIC_64 || header->filetype!=MH_EXECUTE ||
+           ![[NSString stringWithUTF8String:path].lastPathComponent isEqualToString:executable])continue;
+        result=(uint64_t)header-0x100000000ULL;
+        return result;
+    }
+    return UINT64_MAX;
+}
+
 static NSString *probe_name(uint64_t object) {
     uint32_t name[2]={0};uint64_t block=0;uint16_t header=0;
-    uint64_t slide=_dyld_get_image_vmaddr_slide(0);
+    uint64_t slide=probe_slide();
+    if(slide==UINT64_MAX)return @"?";
     if(!probe_read(object+0x18,name,8) || !probe_read(slide+0x108837ec0ULL+0xd0+(name[0]>>16)*8,&block,8))return @"?";
     uint64_t entry=block+(name[0]&65535)*2;
     if(!probe_read(entry,&header,2))return @"?";
@@ -38,7 +57,8 @@ static void snapshot_race(void) {
     // Read-only layouts verified for the retained 2.71.1 executable. Fail
     // closed on absent worlds; no original engine methods are invoked here.
     uint64_t engine=0,contexts=0,context=0,world=0,level=0,actors=0;int count=0;
-    uint64_t slide=_dyld_get_image_vmaddr_slide(0);
+    uint64_t slide=probe_slide();
+    if(slide==UINT64_MAX)return;
     if(!probe_read(slide+0x108b0b288ULL,&engine,8) || !engine ||
        !probe_read(engine+0xc48,&contexts,8) || !probe_read(engine+0xc50,&count,4) || count<1 || count>16 ||
        !probe_read(contexts,&context,8) || !probe_read(context+0x280,&world,8) || !world)return;
@@ -67,9 +87,11 @@ static void snapshot_race(void) {
 }
 
 static void snapshot_threads(void) {
+    uint64_t slide=probe_slide();
+    if(slide==UINT64_MAX)return;
     thread_act_array_t threads=NULL;mach_msg_type_number_t count=0;
     if(task_threads(mach_task_self(),&threads,&count)!=KERN_SUCCESS)return;
-    uint64_t base=(uint64_t)_dyld_get_image_header(0);
+    uint64_t base=slide+0x100000000ULL;
     for(unsigned i=0;i<count;i++) {
         thread_extended_info_data_t info={0};mach_msg_type_number_t info_count=THREAD_EXTENDED_INFO_COUNT;
         thread_info(threads[i],THREAD_EXTENDED_INFO,(thread_info_t)&info,&info_count);
@@ -132,10 +154,17 @@ static void fit_catalyst_view(UIView *view,NSUInteger depth) {
 }
 #endif
 
+#ifdef OFFLINE_LOCAL_MENU
+#include "offline_menu.m"
+#endif
+
 __attribute__((constructor)) static void begin_probe(void) {
     @autoreleasepool {
         record([NSString stringWithFormat:@"probe-v1 bundle=%@ home=%@",NSBundle.mainBundle.bundleIdentifier,NSHomeDirectory()]);
         restore_metadata();
+#ifdef OFFLINE_LOCAL_MENU
+        dispatch_async(dispatch_get_main_queue(),^{start_local_menu();});
+#endif
         record([NSString stringWithContentsOfFile:[NSBundle.mainBundle.bundlePath stringByAppendingPathComponent:@"ue4commandline.txt"] encoding:NSUTF8StringEncoding error:nil]);
         for(int delay=1;delay<=31;delay+=5) dispatch_after(dispatch_time(DISPATCH_TIME_NOW,(int64_t)delay*NSEC_PER_SEC),dispatch_get_main_queue(),^{
             id delegate=UIApplication.sharedApplication.delegate;

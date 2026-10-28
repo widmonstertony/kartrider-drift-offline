@@ -150,6 +150,7 @@ int main(int argc,char **argv) {
         if(!readmem(task,images.array+i*sizeof(image),&image,sizeof(image)))continue;
         char path[1024]={0};
         if(!readmem(task,image.path,path,sizeof(path)-1))continue;
+        if(inspect&&i==0)printf("First image 0x%llx %s\n",(unsigned long long)image.load,path);
         if(inspect&&strstr(path,"OfflineProbe"))printf("Probe image 0x%llx %s\n",(unsigned long long)image.load,path);
         if(!strstr(path,"/KartDrift.app/KartDrift"))continue;
         main_load=image.load;
