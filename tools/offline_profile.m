@@ -87,6 +87,12 @@ static NSArray *profile_catalog(uint64_t tables) {
 #ifdef OFFLINE_LOCAL_SAVES
 #include "offline_save.m"
 #endif
+#ifdef OFFLINE_LOCAL_UPGRADES
+#include "offline_upgrades.m"
+#endif
+#ifdef OFFLINE_LOCAL_TRACKS
+#include "offline_tracks.m"
+#endif
 #ifdef OFFLINE_LOCAL_MATCH
 #include "offline_match.m"
 #endif
@@ -103,6 +109,9 @@ static void profile_initialize(void) {
     if(!account||!probe_read(account+0x181,&logged,1)||logged!=1||
        !probe_read(account+0x1a0,&debug,1)||debug!=1||!probe_read(account+0x550,&platform,1)||platform!=6)return;
     if(account==initialized_account) {
+#ifdef OFFLINE_LOCAL_TRACKS
+        track_tick();
+#endif
 #ifdef OFFLINE_LOCAL_SAVES
         uint64_t current=profile_subsystem(account+0x28,@"AccountPreset");if(current)save_tick(current);
 #endif
@@ -157,6 +166,12 @@ static void profile_initialize(void) {
 #ifdef OFFLINE_LOCAL_SAVES
     NSMutableSet *known=[NSMutableSet set];for(NSArray *entry in parsed)[known addObject:entry[0]];save_known_items=known;
     save_restore(preset);save_tick(preset);
+#endif
+#ifdef OFFLINE_LOCAL_UPGRADES
+    if(!upgrade_initialize(account,tables)){record(@"local modifications initialization failed");return;}
+#endif
+#ifdef OFFLINE_LOCAL_TRACKS
+    if(!track_initialize(account,tables)){record(@"local track initialization failed");return;}
 #endif
     initialized_account=account;
 #ifdef OFFLINE_UNLOCK_LOCAL_CATALOG

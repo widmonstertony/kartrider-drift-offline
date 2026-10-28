@@ -38,7 +38,12 @@ rm -rf Payload/KartDrift.app/SC_Info Payload/KartDrift.app/_CodeSignature
 '''
     for i in chunks:
         script+=f'cp {q(a.resources)}/pakchunk{i}-ios.pak Payload/KartDrift.app/cookeddata/kartdrift/content/paks/\n'
-        script+=f'cp {q(a.resources)}/kartdrift_chunk{i}_sf_metal.*.metallib Payload/KartDrift.app/cookeddata/kartdrift/content/\n'
+        # Some original chunks have no separate Metal library. Require every
+        # requested PAK, but copy shaders only where the retained files exist.
+        script+=f'for shader in {q(a.resources)}/kartdrift_chunk{i}_sf_metal.*.metallib; do\n'
+        script+='    if test -f "$shader"; then cp "$shader" Payload/KartDrift.app/cookeddata/kartdrift/content/; fi\ndone\n'
+    script+='find Payload/KartDrift.app -type d -exec chmod a+rx {} +\n'
+    script+='find Payload/KartDrift.app/cookeddata -type f -exec chmod a+r {} +\n'
     script+='zip -q -0 -r offline-probe.ipa Payload\necho 0 > assemble.exit\n'
     command=f'mkdir -p {q(str(work))}; nohup sh -c {q(script)} > {q(str(work/"assemble.log"))} 2>&1 &'
     result=call('run_command',{'command':command,'timeout':10})

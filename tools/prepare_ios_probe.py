@@ -28,6 +28,8 @@ parser.add_argument('--unlock-local-catalog', action='store_true', help='Grant e
 parser.add_argument('--enable-local-garage', action='store_true', help='Experimental original local equipment updates and persistent preset save/restore')
 parser.add_argument('--enable-local-match-entry', action='store_true', help='Experimental original Play to Village speed/item AI races and original Exit to lobby; requires local garage')
 parser.add_argument('--enable-local-race-equipment', action='store_true', help='Load the saved local garage preset through original race descriptor functions')
+parser.add_argument('--enable-local-upgrades', action='store_true', help='Experimental original modification grades, gear choices and local saves')
+parser.add_argument('--enable-local-tracks', action='store_true', help='Original local track availability, selection persistence and selected-map AI races')
 parser.add_argument('--bundle-id', default='org.kartdrift.preservation.offline', help='Independent test app identity')
 parser.add_argument('--display-name', default='漂移离线测试')
 parser.add_argument('--system-app-container', action='store_true', help='Require an isolated container when installing the test app as a rootless DEB')
@@ -40,6 +42,10 @@ if args.enable_local_match_entry and (not args.enable_local_garage or not args.r
     parser.error('--enable-local-match-entry requires local garage/results and replaces --enable-local-replay')
 if args.enable_local_race_equipment and not args.enable_local_match_entry:
     parser.error('--enable-local-race-equipment requires --enable-local-match-entry')
+if args.enable_local_upgrades and (not args.enable_local_race_equipment or not args.unlock_local_catalog):
+    parser.error('--enable-local-upgrades requires local race equipment and the full local catalog')
+if args.enable_local_tracks and not args.enable_local_upgrades:
+    parser.error('--enable-local-tracks requires --enable-local-upgrades')
 if args.unlock_local_catalog and not args.initialize_local_profile:
     parser.error('--unlock-local-catalog requires --initialize-local-profile')
 if not 1 <= args.players <= 4 or not 0 <= args.ais <= 7 or args.players + args.ais > 8:
@@ -123,6 +129,14 @@ if args.enable_local_race_equipment:
     from enable_ios_race_equipment import patch
     patch(OUT/'KartDrift',OUT/'KartDrift-race-equipment')
     (OUT/'KartDrift-race-equipment').replace(OUT/'KartDrift')
+if args.enable_local_upgrades:
+    from enable_ios_local_upgrades import patch
+    patch(OUT/'KartDrift',OUT/'KartDrift-upgrades')
+    (OUT/'KartDrift-upgrades').replace(OUT/'KartDrift')
+if args.enable_local_tracks:
+    from enable_ios_local_tracks import patch
+    patch(OUT/'KartDrift',OUT/'KartDrift-tracks')
+    (OUT/'KartDrift-tracks').replace(OUT/'KartDrift')
 ent={'application-identifier':BUNDLE,'get-task-allow':True}
 if args.system_app_container:
     ent['com.apple.private.security.container-required']=True
@@ -144,6 +158,8 @@ if args.lobby_probe:
 subprocess.run(['xcrun','--sdk','iphoneos','clang','-arch','arm64','-miphoneos-version-min=15.0',
     '-dynamiclib','-fobjc-arc',*(['-DOFFLINE_LOCAL_MENU'] if args.enable_local_menu else []),
     *(['-DOFFLINE_LOCAL_SAVES'] if args.enable_local_garage else []),
+    *(['-DOFFLINE_LOCAL_UPGRADES'] if args.enable_local_upgrades else []),
+    *(['-DOFFLINE_LOCAL_TRACKS'] if args.enable_local_tracks else []),
     *(['-DOFFLINE_LOCAL_MATCH'] if args.enable_local_match_entry else []),
     *(['-DOFFLINE_LOCAL_PROFILE'] if args.initialize_local_profile else []),
     *(['-DOFFLINE_UNLOCK_LOCAL_CATALOG'] if args.unlock_local_catalog else []),

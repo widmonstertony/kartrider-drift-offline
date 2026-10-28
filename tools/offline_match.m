@@ -1,5 +1,5 @@
-/* Experimental original Play request consumer. The first restored local race
-   uses the retained Village_I01 map; map selection coverage is separate work.
+/* Experimental original Play request consumer. Optional original track
+   selection replaces the fixed initial Village map.
    Runs only inside profile_initialize on the original game thread. */
 
 static BOOL match_verified(void) {
@@ -43,6 +43,10 @@ static void match_tick(uint64_t world,uint64_t account) {
     if(!preset){record(@"local match rejected missing original equipment");return;}
     save_tick(preset);
     NSString *map=@"/Game/ART/Env/Theme_Village/village_I01/Village_I01";
+#ifdef OFFLINE_LOCAL_TRACKS
+    map=track_match_path(type);
+    if(!map){record(@"local match rejected unavailable selected track");return;}
+#endif
     NSString *kind=type==0?@"SpeedSingleGameMode":@"ItemSingleGameMode";
     NSString *options=[NSString stringWithFormat:@"game=/Script/KartDrift.%@?players=1?ais=3?observers=0",kind];
     unichar map_text[256]={0},option_text[256]={0};

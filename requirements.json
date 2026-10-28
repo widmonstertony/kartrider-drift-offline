@@ -147,5 +147,21 @@
       "Original track selector and all retained track coverage",
       "Complete per-resource load coverage"
     ]
+  },
+  "combined_candidate_v28": {
+    "status": "Built for owner-led interaction acceptance; not a completed offline release",
+    "ios_startup": "Installed update boots original mobile lobby on the authorized iPad; 3326 inventory definitions, 208 configured modification entries restored, 95 normal race maps initialized; 19 equipment slots restored with native comparison.",
+    "mac_startup": "Apple Silicon Catalyst full-resource app passes deep strict signature verification and initializes original lobby, 3326 inventory definitions, 208 modification entries and 95 normal race maps.",
+    "modifications": "Original maximum configured grade and per-parameter limits; full sum-of-limits gear budget; Apply/Reset callbacks save JSON on original game thread; race hook uses original gear math and retained body-name mappings.",
+    "tracks": "95 retained normal race definitions, 95 speed and 62 item; original availability/preparation callbacks, original selector selection saved locally and consumed by original lobby Play dispatcher. Special/license/random/dummy definitions excluded from normal race travel.",
+    "unverified": [
+      "Changed gear Apply/Reset UI acknowledgement and restart after an actual changed allocation",
+      "Selected non-Village track UI/travel and AI navigation",
+      "Applied gear values and loaded per-kart base performance during a race",
+      "Player-driven full finish, full item effects, actual iPhone installation and Mac controls"
+    ],
+    "missing_definition": "Kart:413000005 has an upgrade definition but no retained inventory definition; skipped rather than inventing content",
+    "distribution": "Owner-local full-resource IPA and Apple Silicon Mac ZIP; no original assets/binaries published to GitHub",
+    "ios_installation_limit": "Current jailbreak/test signing environment; ordinary stock iPhone compatibility is not established"
   }
 }
