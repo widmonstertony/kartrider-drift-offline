@@ -16,13 +16,24 @@
   ],
   "intermediate_milestone": "Load the retained iOS training map and establish local player control",
   "preservation": "Keep original installed app and data; modify and test an independent copy",
-  "status": "In progress. Building an original native game implementation from scratch. No complete game with original assets and verified offline race modes has been delivered.",
+  "status": "Original-client route resumed after user correction. The separate self-written prototype is not an accepted restoration. Original Drift clone still blocks on startup/network error 80099; no original-client offline race has been verified.",
   "implementation": {
-    "source": "Write the full game source ourselves; do not copy, fork or embed other game implementations",
+    "source": "Reverse engineer and modify the preserved original client; do not substitute a newly written kart game. Write our analysis and patch tooling ourselves.",
     "allowed_research": "Study publicly described principles and validate behavior; implement our own code",
     "platform_dependencies": "Native operating-system SDKs, compilers and standard libraries",
-    "systems": ["vehicle physics", "drifting", "AI drivers", "speed races", "item races", "rendering", "controls", "menus", "saving"],
-    "original_assets": "Import retained original art and sound separately; do not publish original game assets as our source code"
+    "systems": [
+      "vehicle physics",
+      "drifting",
+      "AI drivers",
+      "speed races",
+      "item races",
+      "rendering",
+      "controls",
+      "menus",
+      "saving"
+    ],
+    "original_assets": "Import retained original art and sound separately; do not publish original game assets as our source code",
+    "runtime": "Original app executable, original engine, assets, physics, sound and gameplay. Offline startup and local AI race patches are the work to be completed."
   },
   "mandatory_modes": [
     {
@@ -44,9 +55,14 @@
       "drive_and_drift": true
     }
   ],
-  "follow_on_after_success": {
-    "project": "原版《跑跑卡丁车》移植研究",
-    "start_condition": "Complete and verify current KartRider: Drift offline solo, speed race, item race and multiple AI opponents",
-    "approach": "Investigate existing reverse engineering and gameplay reimplementation projects; preserve original gameplay feel using retained original assets where available"
-  }
+  "requested_versions": [
+    {
+      "name": "KartRider: Drift",
+      "source": "Preserved original iOS 2.71.1 client and resources"
+    },
+    {
+      "name": "Original PC KartRider (from 2004)",
+      "source": "Reverse engineer and port the original PC client and retained resources; not the mobile KartRider Rush+ client"
+    }
+  ]
 }
