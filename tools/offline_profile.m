@@ -87,6 +87,9 @@ static NSArray *profile_catalog(uint64_t tables) {
 #ifdef OFFLINE_LOCAL_SAVES
 #include "offline_save.m"
 #endif
+#ifdef OFFLINE_LOCAL_MATCH
+#include "offline_match.m"
+#endif
 
 static void profile_initialize(void) {
     static uint64_t initialized_account=0;
@@ -102,6 +105,9 @@ static void profile_initialize(void) {
     if(account==initialized_account) {
 #ifdef OFFLINE_LOCAL_SAVES
         uint64_t current=profile_subsystem(account+0x28,@"AccountPreset");if(current)save_tick(current);
+#endif
+#ifdef OFFLINE_LOCAL_MATCH
+        match_tick(world,account);
 #endif
         return;
     }

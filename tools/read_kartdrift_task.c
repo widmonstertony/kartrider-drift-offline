@@ -131,9 +131,18 @@ int main(int argc,char **argv) {
     if(sysctl(mib,4,NULL,&size,NULL,0)) {perror("sysctl size");return 1;}
     struct kinfo_proc *processes=malloc(size);
     if(sysctl(mib,4,processes,&size,NULL,0)) {perror("sysctl list");return 1;}
-    pid_t pid=0;
-    for(size_t i=0;i<size/sizeof(*processes);i++)
-        if(!strcmp(processes[i].kp_proc.p_comm,"KartDrift")&&processes[i].kp_proc.p_pid>pid)pid=processes[i].kp_proc.p_pid;
+    pid_t pid=0,requested=0;
+    const char *requested_text=getenv("KARTDRIFT_INSPECT_PID");
+    if(requested_text){
+        char *end=NULL;long value=strtol(requested_text,&end,10);
+        if(!*requested_text||*end||value<=0||value>INT32_MAX){free(processes);return 2;}
+        requested=(pid_t)value;
+    }
+    for(size_t i=0;i<size/sizeof(*processes);i++){
+        pid_t candidate=processes[i].kp_proc.p_pid;
+        if(!strcmp(processes[i].kp_proc.p_comm,"KartDrift")&&
+           (requested?candidate==requested:candidate>pid))pid=candidate;
+    }
     free(processes);
     if(!pid){puts("KartDrift is not running");return 2;}
     task_t task=MACH_PORT_NULL; kern_return_t k=task_for_pid(mach_task_self(),pid,&task);
@@ -152,7 +161,7 @@ int main(int argc,char **argv) {
         if(!readmem(task,image.path,path,sizeof(path)-1))continue;
         if(inspect&&i==0)printf("First image 0x%llx %s\n",(unsigned long long)image.load,path);
         if(inspect&&strstr(path,"OfflineProbe"))printf("Probe image 0x%llx %s\n",(unsigned long long)image.load,path);
-        if(!strstr(path,"/KartDrift.app/KartDrift"))continue;
+        if(!strstr(path,"/KartDrift.app/KartDrift")&&!strstr(path,"/KartDriftOfflineLocal.app/KartDrift"))continue;
         main_load=image.load;
         printf("Main image 0x%llx %s\n",(unsigned long long)image.load,path);
         if(inspect)continue;

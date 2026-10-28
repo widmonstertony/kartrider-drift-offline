@@ -24,7 +24,7 @@
   ],
   "intermediate_milestone": "Load the retained iOS training map and establish local player control",
   "preservation": "Keep original installed app and data; modify and test an independent copy",
-  "status": "Original Drift 2.71.1, tested on an iPad running iPadOS 16.1: Village_I01 speed and item races each run with one local player and three original AI. All three AI finish with original checkpoints, ranking, podium and final results. The unattended player retires; a full player-driven finish remains unverified. Original table initialization restores 79 tables and 25 item cubes. AI pickup and original Shield/Waterbomb objects linked to AI components are observed; complete per-item hit/defense/effect coverage remains unverified. Simultaneous real touchscreen steering and drift update original input fields and release correctly; complete drift handling, camera and screenshot orientation need further checks. Local replay through original relative map travel is verified with a second complete AI item race in the same process. A diagnostic native selector now queues original speed/item travel on the original game thread; After switching from item to speed in the same iOS process, three original AI finish with original EndGame/results at 50.144/53.885/54.922 seconds. This selector is intermediate only. A usable original pause flow remains missing. The original ARM64 iOS app also runs as a separately signed Mac Catalyst diagnostic copy: Village_I01 item races and original final results are visibly verified, in an App Sandbox with no network entitlement. Mac player controls and window resizing remain unverified. A clean Mac diagnostic rebuild and deep signature validation pass. Actual iPhone play, offline Android play and an original 2004-PC-client port remain unverified. The original lobby probe creates the original debug account only in local worlds and selects the retained mobile UI. The earlier Mac probe visibly showed the original lobby, garage category screen, empty kart inventory page and settings; the original settings return flow works. Thirteen lobby levels are loaded. The updated iPad build also visibly shows the original mobile lobby, settings page and mode cards, with thirteen lobby levels loaded. The experimental original-inventory initializer now reads the retained original initial table and calls original inventory/equipment functions on the original game thread. Mac read-only inspection confirms 96 initial items, 16 equipped slots and a null NetDriver; the updated iPad records the same initialization counts and visibly displays the original character and kart. Original race entry/return remains incomplete; the later garage/save milestone below verifies actual local equipment updates and persistence. An optional local-catalog grant now applies all 3,326 original item definitions to the original local inventory. Mac read-only verification confirms all six populated original inventory categories total 3,326 items. Two updated iPad launches record the full catalog grant and return to the original lobby. A clean Mac build includes all 26 retained downloaded resource chunks plus the original app resources. This does not verify every asset, garage equipment operation or track unlock. Full unlocked-content acceptance remains incomplete. No complete deliverable is claimed.",
+  "status": "Original Drift 2.71.1, tested on an iPad running iPadOS 16.1: Village_I01 speed and item races each run with one local player and three original AI. All three AI finish with original checkpoints, ranking, podium and final results. The unattended player retires; a full player-driven finish remains unverified. Original table initialization restores 79 tables and 25 item cubes. AI pickup and original Shield/Waterbomb objects linked to AI components are observed; complete per-item hit/defense/effect coverage remains unverified. Simultaneous real touchscreen steering and drift update original input fields and release correctly; complete drift handling, camera and screenshot orientation need further checks. Local replay through original relative map travel is verified with a second complete AI item race in the same process. A diagnostic native selector now queues original speed/item travel on the original game thread; After switching from item to speed in the same iOS process, three original AI finish with original EndGame/results at 50.144/53.885/54.922 seconds. This selector is intermediate only. A usable original pause flow remains missing. The original ARM64 iOS app also runs as a separately signed Mac Catalyst diagnostic copy: Village_I01 item races and original final results are visibly verified, in an App Sandbox with no network entitlement. Mac player controls and window resizing remain unverified. A clean Mac diagnostic rebuild and deep signature validation pass. Actual iPhone play, offline Android play and an original 2004-PC-client port remain unverified. The original lobby probe creates the original debug account only in local worlds and selects the retained mobile UI. The earlier Mac probe visibly showed the original lobby, garage category screen, empty kart inventory page and settings; the original settings return flow works. Thirteen lobby levels are loaded. The updated iPad build also visibly shows the original mobile lobby, settings page and mode cards, with thirteen lobby levels loaded. The experimental original-inventory initializer now reads the retained original initial table and calls original inventory/equipment functions on the original game thread. Mac read-only inspection confirms 96 initial items, 16 equipped slots and a null NetDriver; the updated iPad records the same initialization counts and visibly displays the original character and kart. The later original-UI match milestone below verifies both local race entry paths and result-to-lobby return on iPad; the garage/save milestone verifies changed local equipment persistence. An optional local-catalog grant now applies all 3,326 original item definitions to the original local inventory. Mac read-only verification confirms all six populated original inventory categories total 3,326 items. Two updated iPad launches record the full catalog grant and return to the original lobby. A clean Mac build includes all 26 retained downloaded resource chunks plus the original app resources. This does not verify every asset, garage equipment operation or track unlock. Full unlocked-content acceptance remains incomplete. No complete deliverable is claimed.",
   "implementation": {
     "source": "Reverse engineer and modify the preserved original client; do not substitute a newly written kart game. Write our analysis and patch tooling ourselves.",
     "allowed_research": "Study publicly described principles and validate behavior; implement our own code",
@@ -90,12 +90,62 @@
     "saved_json_unchanged_after_restart": true,
     "mac_validation": "16-slot initial preset saved and restored across a real process restart; actual changed Mac equipment not yet verified",
     "remaining": [
-      "Full retained-resource package reload after fixing packaged asset permissions",
       "Model and sound coverage across the full inventory",
       "Nonempty livery editing and restoration",
-      "Original lobby entry to speed/item races with original AI",
       "Player-driven finish and original return to lobby",
       "Actual iPhone installation and complete offline validation"
+    ],
+    "full_retained_resource_reload": {
+      "paks": 27,
+      "metal_libraries": 44,
+      "original_lobby_saved_character_and_kart_visible": true,
+      "every_asset_verified": false
+    }
+  },
+  "ios_original_ui_match_validation": {
+    "device": "iPadOS 16.1, isolated retained original app; actual iPhone unverified",
+    "track": "Village_I01 only",
+    "players": 1,
+    "original_ai": 3,
+    "original_lobby_item_start": true,
+    "original_mode_page_solo_speed_start": true,
+    "item_ai_finish_seconds": [
+      54.146,
+      54.62,
+      56.978
+    ],
+    "speed_ai_finish_seconds": [
+      53.849,
+      54.947,
+      59.55
+    ],
+    "original_results_and_exit_to_lobby_both_modes": true,
+    "player_finish": "RETIRE; player-driven complete race remains unverified",
+    "garage_preset_in_race": "Verified on iPad: current saved Kart:401000213, wheel/handle/parts, Character:100000026, Costume:226000003 and motions match original PawnState and skeletal component descriptors. Actual loaded meshes Mesh_Porsche_911 and Mesh_Draki_Tomb. Original results name the player kart 911 Turbo S Cabriolet. AI keep default original equipment and finish at 50.137/54.151/58.563 seconds. Full equipment and vehicle-performance coverage unverified.",
+    "remaining": [
+      "Original track selection and full track unlock coverage",
+      "Player-driven finish, pause and complete item behavior",
+      "Complete local-only operation without SDK server dependencies",
+      "Actual iPhone, macOS input and Android validation",
+      "All equipment, nonempty livery and kart performance parameter coverage"
+    ]
+  },
+  "offline_unlock_scope": {
+    "required": [
+      "All retained original characters, costumes, karts, parts, cosmetics and consumables",
+      "All retained original kart modification grades, gear budgets and original gear allocation UI",
+      "All retained original tracks selectable for supported local speed/item AI races",
+      "Persistent offline equipment and modification selections"
+    ],
+    "acceptance": "Every retained entry must be usable in its original UI and race flow; inventory count alone does not establish completion.",
+    "verified": [
+      "3326 original item definitions granted into the original inventory",
+      "Selected kart/character/costume loaded into a local item race"
+    ],
+    "pending": [
+      "Complete modification and gear persistence",
+      "Original track selector and all retained track coverage",
+      "Complete per-resource load coverage"
     ]
   }
 }
