@@ -16,7 +16,14 @@
   ],
   "intermediate_milestone": "Load the retained iOS training map and establish local player control",
   "preservation": "Keep original installed app and data; modify and test an independent copy",
-  "status": "In progress. No playable offline race has been verified. Training/tutorial only is insufficient.",
+  "status": "In progress. Building an original native game implementation from scratch. No complete game with original assets and verified offline race modes has been delivered.",
+  "implementation": {
+    "source": "Write the full game source ourselves; do not copy, fork or embed other game implementations",
+    "allowed_research": "Study publicly described principles and validate behavior; implement our own code",
+    "platform_dependencies": "Native operating-system SDKs, compilers and standard libraries",
+    "systems": ["vehicle physics", "drifting", "AI drivers", "speed races", "item races", "rendering", "controls", "menus", "saving"],
+    "original_assets": "Import retained original art and sound separately; do not publish original game assets as our source code"
+  },
   "mandatory_modes": [
     {
       "mode": "竞速赛",
@@ -36,5 +43,10 @@
       "offline": true,
       "drive_and_drift": true
     }
-  ]
+  ],
+  "follow_on_after_success": {
+    "project": "原版《跑跑卡丁车》移植研究",
+    "start_condition": "Complete and verify current KartRider: Drift offline solo, speed race, item race and multiple AI opponents",
+    "approach": "Investigate existing reverse engineering and gameplay reimplementation projects; preserve original gameplay feel using retained original assets where available"
+  }
 }

@@ -1,91 +1,92 @@
 # KartDrift Offline
 
-《跑跑卡丁车：漂移》原版客户端的离线保存与运行研究。这是独立建立的项目，目标是让保留下来的客户端在本地运行。
+从零编写的原生离线卡丁车游戏。独立创建的仓库，不是 fork，也不包含其他卡丁车项目的实现代码。游戏运行部分只依赖 C++ 标准库和平台 SDK。
 
-**目前仍在研究阶段，没有可玩的离线版本，也没有可下载的游戏安装包。** 已完成的工作是客户端与资源检查、独立 iOS 测试副本制作和真机启动诊断。测试副本目前仍会显示服务器主机名错误（80099）。成功安装、显示启动画面或找到地图文件，都不代表离线玩法已经完成。
+**当前是可运行的早期原型，不是已经恢复的《跑跑卡丁车：漂移》。** 车辆、人物、赛道和音效暂用我们编写的程序化内容；原版美术、音效和赛道尚未导入，物理手感也没有验证到与原版一致。
 
-## 目标
+## 已实现
 
-- 优先实现 iOS，并推进 Apple Silicon macOS 和 Android，共三个平台。
-- 原版客户端中能够本地驾驶、漂移和单人练习。
-- 离线竞速赛：玩家与多名能正常行驶的 AI 一起完成比赛。
-- 离线道具赛：玩家与多名 AI 比赛，道具能够正常使用。
-- 保留原安装与缓存，以独立副本进行实验。
+- 固定 120 Hz 车辆模拟：加速、刹车、转向、侧滑、漂移集气、氮气、护栏和车辆碰撞。
+- 竞速赛：玩家与 7 名 AI，三圈、名次、独立完赛时间。
+- 道具赛：加速、火箭、香蕉、护盾、闪电、水弹；AI 会拾取和使用，道具有实际效果。
+- 单人练习、救援、暂停、重开、模式选择、最佳成绩的本地保存。
+- 自研共享场景生成与追尾摄像机，Apple Metal 和 Android OpenGL ES 3 渲染。
+- 原生键盘/触屏界面，临时引擎、漂移和事件合成音效。
 
-训练场和教程只是中间步骤，不能代替竞速赛和道具赛的验收。机器可读要求见 [requirements.json](requirements.json)。
+## 验证状态
 
-## 已确认的结果
+| 项目 | 状态 |
+| --- | --- |
+| 核心测试 | 三个随机种子的竞速/道具赛均 8/8 完赛；AI 漂移集气、氮气、道具命中和护盾检查通过 |
+| Apple Silicon Mac | 已打开原生 3D 应用，观察到三圈道具赛完成 |
+| iOS | 已在授权 iPadOS 16.1 设备安装、启动并渲染行驶场景；完整比赛与触控检查继续进行 |
+| iPhone | 已构建 iPhone/iPad arm64 包，尚未在 iPhone 真机验证 |
+| Android | 原生 arm64 APK 已编译并通过 v2/v3 签名校验，尚无 Android 真机运行证据 |
+| 原版内容/手感 | 尚未完成，原版保留文件不进入公开仓库 |
 
-- 研究客户端版本为 2.71.1。
-- 保留的 iOS 缓存内有训练场、教程、其他赛道以及配套 Metal 着色器。
-- 已验证这批客户端 PAK 的索引解密和 SHA-1 校验；目录清单中的流式子关卡不能按独立赛道计数。
-- 驾照任务数据中包含车辆配置、AI 生成配置及 AI 行驶数据。
-- 发行版的 `Dev_OpenLicense` 实现为空，不能把它当作可用入口。
-- 原版逻辑中存在 `?License=L00` 等任务选项；当前还没有通过这些选项验证可玩的离线比赛。
+`自动测试` 会让玩家车辆也交给 AI，用于验证比赛流程，不能替代手动驾驶验收。
+
+## 构建
+
+Mac 需要 Xcode、CMake、Ninja：
+
+```sh
+sh scripts/build_apple.sh mac
+open build/mac/KartDriftOffline.app
+```
+
+左右方向键或 A/D 转向，空格漂移，Shift 或 K 使用氮气/道具，下方向键或 S 刹车，R 救援，P 暂停，1/2/3 切换模式，T 切换自动测试。自动加速已开启。
+
+iOS：
+
+```sh
+sh scripts/build_apple.sh ios
+```
+
+输出 `build/KartDriftOffline-ios.ipa`。脚本中的 ad-hoc 签名仅用于允许这种安装方式的授权开发设备。普通 iPhone 需要 Apple 开发签名和 provisioning；可以生成 Xcode 项目后选择自己的开发团队和设备：
+
+```sh
+cmake -S . -B build/xcode-ios -G Xcode \
+  -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_SYSROOT=iphoneos \
+  -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0
+open build/xcode-ios/KartDriftOffline.xcodeproj
+```
+
+触屏横屏操作：左侧转向/刹车，右侧漂移和氮气/道具，上方切换模式。
+
+Android 需要官方 NDK、SDK build-tools、平台 `android.jar` 和 JDK 17。脚本直接调用官方编译工具：
+
+```sh
+python3 scripts/build_android.py \
+  --ndk /path/to/android-ndk \
+  --java-home /path/to/jdk/Contents/Home \
+  --build-tools /path/to/android-sdk/build-tools/35.0.1 \
+  --android-jar /path/to/android-sdk/platforms/android-35/android.jar
+```
+
+输出 `build/android/KartDriftOffline-android.apk`，开发密钥仅保存在本机构建目录。使用系统 Activity、GLSurfaceView、控件和共享 C++ 模拟；清单没有申请网络权限。
 
 ## 代码
 
-| 文件 | 用途 |
+| 路径 | 内容 |
 | --- | --- |
-| `tools/pak_archive.py` | 只读 PAK 索引校验、文件读取与命令行检查 |
-| `tools/list_ios_pak_maps.c` | 在 iOS 上只读列出 PAK 内的地图包 |
-| `tools/inspect_client.py` | Android 包身份、证书、原生符号和资源检查 |
-| `tools/disasm_android.py` | 解析本地 Android 原生函数及调用目标 |
-| `tools/disasm_ios.py`、`tools/ios_xrefs.py` | 解析本地 iOS 函数边界和字符串引用 |
-| `tools/read_kartdrift_task.c` | 从正在运行的自有客户端读取保留所需的执行页 |
-| `tools/rebuild_ios_binary.py` | 用读取的执行页重建本地分析副本 |
-| `tools/offline_probe.m` | 测试副本启动诊断库 |
-| `tools/prepare_ios_probe.py` | 准备独立标识的本地诊断补丁 |
-| `tools/build_device_ipa.py` | 在自有设备缓存中组合测试安装包 |
-| `tools/ios_mcp.py` | 调用用户自己的 iOS MCP 服务，连接信息仅保存在本地 |
+| `core/Game.*` | 车辆物理、赛道中心线、AI、圈数、排名、碰撞和道具 |
+| `core/Scene.*` | 自建场景几何和摄像机数学 |
+| `core/Audio.*` | 临时音频合成，不含原版录音 |
+| `platform/apple/` | AppKit/UIKit、Metal、AudioQueue、输入和保存 |
+| `platform/android/` | Android 界面、JNI、GLES、AAudio |
+| `scripts/` | 构建与打包 |
+| `tests/race_test.cpp` | 完整比赛与交互机制集成检查 |
+| `tools/` | 早期客户端保存/分析实验，不参与游戏编译或运行 |
 
-## 本地使用
+Apple 开发版在本机 Documents 下写入 `kartdrift-last-race.json`，便于核实实际运行，不上传服务器。开发深链 `kartdriftoffline://race?mode=speed&autopilot=1` 开始自动比赛，`mode=item` 或 `practice` 选择其他模式。`kartdriftoffline://input?steer=0.5&drift=1` 可测试输入通路。
 
-Python 3.11 或更新版本：
+## 后续验收
 
-```sh
-python3 -m venv .venv
-.venv/bin/python -m pip install -r requirements.txt
-.venv/bin/python tools/pak_archive.py /path/to/pakchunk0-ios.pak
-.venv/bin/python tools/pak_archive.py /path/to/pakchunk0-ios.pak --list
-```
+以 iOS 真机手动驾驶、漂移、完整竞速赛和道具赛为首要验收，再核实 Mac 和 Android。继续接入单独保留的原版内容并校准手感；完成当前目标后，再研究 2004 年原版《跑跑卡丁车》的移植。训练场或启动画面不能代替这些目标。见 [requirements.json](requirements.json)。
 
-PAK 读取器目前支持未压缩和 Zlib 数据。Oodle 数据还需要自行准备兼容的 `tools/ooz-decode` 命令行解码器，其接口是：第一个参数为预期输出字节数，从标准输入读压缩数据，向标准输出写解压数据。可参考 [ooz 上游](https://github.com/rarten/ooz)；上游代码没有包含在本仓库中。
+## 保存研究与许可
 
-iOS 诊断需要 Xcode 的 iPhoneOS SDK、`ldid`，以及允许运行这些调试工具的自有设备环境。**尚未提供普通未越狱 iPhone 的安装方案。** 示例编译命令：
+`tools/` 是此前对 2.71.1 客户端的资源检查和独立诊断副本实验，不是本游戏的运行依赖。原客户端诊断副本仍受停服启动流程阻挡。可选 Python 分析依赖见 `requirements.txt`；版本资料来自[公开客户端保存资料](https://clientlover.tistory.com/13)，第三方解压工具没有包含或链接进游戏。
 
-```sh
-xcrun --sdk iphoneos clang -arch arm64 -miphoneos-version-min=15.0 -O2 \
-  -o tools/read_kartdrift_task tools/read_kartdrift_task.c
-ldid -Stools/read_task.entitlements.plist tools/read_kartdrift_task
-xcrun --sdk iphoneos clang -arch arm64 -miphoneos-version-min=15.0 -O2 \
-  -fobjc-arc -dynamiclib -framework Foundation -framework UIKit \
-  -install_name @rpath/OfflineProbe.dylib \
-  -o tools/OfflineProbe.dylib tools/offline_probe.m
-ldid -S tools/OfflineProbe.dylib
-```
-
-MCP 连接地址由本地环境变量配置；会话信息、设备路径和输出报告不会提交：
-
-```sh
-export IOS_MCP_URL=http://YOUR_DEVICE:PORT
-python3 tools/ios_mcp.py describe_screen '{}'
-python3 tools/build_device_ipa.py --help
-```
-
-`prepare_ios_probe.py` 的输入均来自本地保存的客户端：
-
-```text
-runtime/ios-original/KartDrift.app/
-analysis/ios-Info.plist
-analysis/KartDrift-ios-decrypted
-tools/OfflineProbe.dylib
-```
-
-补丁输出到 `runtime/ios-probe-patch.zip`。它是实验性的诊断补丁，不是已经完成的离线游戏补丁。当前版本的固定函数地址与布局仅适用于正在研究的版本，不能直接用于其他版本。
-
-## 内容与许可
-
-本仓库只发布我们编写的研究、构建和诊断代码，采用 MIT 许可。游戏客户端、可执行文件、PAK、着色器、音乐、模型、贴图、SDK 二进制和原始反汇编输出均不随代码发布，也不受本仓库的 MIT 许可覆盖。游戏名称和原版内容的权利属于其各自权利人。
-
-PAK 索引读取中使用的版本密钥来自已有的[公开客户端保存资料](https://clientlover.tistory.com/13)。第三方工具和依赖分别遵循其自身许可。
+我们编写的代码使用 MIT 许可。原版客户端、模型、贴图、音乐、PAK、着色器、SDK、执行页和反汇编输出不随仓库发布，不适用本仓库的 MIT 许可。临时程序化内容由本项目源码生成。游戏名称与原版内容的权利属于各自权利人。

@@ -1,0 +1,6 @@
+cmake_minimum_required(VERSION 3.20)
+project(KartDriftAndroid LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 17)
+add_library(kartdrift SHARED Native.cpp ../../core/Game.cpp ../../core/Scene.cpp ../../core/Audio.cpp)
+target_include_directories(kartdrift PRIVATE ../../core)
+target_link_libraries(kartdrift GLESv3 log aaudio)

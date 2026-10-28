@@ -6,6 +6,12 @@
 !/requirements.txt
 !/requirements.json
 !/tools/
+!/CMakeLists.txt
+!/core/
+!/platform/
+!/tests/
+!/assets/
+!/scripts/
 /tools/*
 !/tools/*.py
 !/tools/*.c
@@ -15,3 +21,8 @@
 /tools/assemble_device_probe_v2.py
 __pycache__/
 *.pyc
+/assets/local/
+/platform/android/.gradle/
+/platform/android/build/
+/platform/android/app/build/
+/platform/android/local.properties

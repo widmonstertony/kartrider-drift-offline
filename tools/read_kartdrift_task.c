@@ -12,7 +12,8 @@ static int readmem(task_t task, uint64_t addr, void *out, size_t size) {
     return k==KERN_SUCCESS && got==size;
 }
 int main(int argc,char **argv) {
-    if(argc<2){fprintf(stderr,"Usage: %s <decrypted-page-output>\n",argv[0]);return 1;}
+    if(argc<2){fprintf(stderr,"Usage: %s <decrypted-page-output>|--inspect\n",argv[0]);return 1;}
+    int inspect=!strcmp(argv[1],"--inspect");
     int mib[4]={CTL_KERN,KERN_PROC,KERN_PROC_ALL,0}; size_t size=0;
     if(sysctl(mib,4,NULL,&size,NULL,0)) {perror("sysctl size");return 1;}
     struct kinfo_proc *processes=malloc(size);
@@ -30,13 +31,17 @@ int main(int argc,char **argv) {
     if(k){printf("task_info=%d\n",k);return 4;}
     struct {uint32_t version,count;uint64_t array;} images;
     if(!readmem(task,info.all_image_info_addr,&images,sizeof(images)))return 5;
+    uint64_t main_load=0;
     for(uint32_t i=0;i<images.count;i++){
         struct {uint64_t load,path,mod;} image;
         if(!readmem(task,images.array+i*sizeof(image),&image,sizeof(image)))continue;
         char path[1024]={0};
         if(!readmem(task,image.path,path,sizeof(path)-1))continue;
+        if(inspect&&strstr(path,"OfflineProbe"))printf("Probe image 0x%llx %s\n",(unsigned long long)image.load,path);
         if(!strstr(path,"/KartDrift.app/KartDrift"))continue;
+        main_load=image.load;
         printf("Main image 0x%llx %s\n",(unsigned long long)image.load,path);
+        if(inspect)continue;
         struct mach_header_64 h;
         if(!readmem(task,image.load,&h,sizeof(h))||h.magic!=MH_MAGIC_64)return 6;
         unsigned char *commands=malloc(h.sizeofcmds);
@@ -57,6 +62,18 @@ int main(int argc,char **argv) {
             off+=lc->cmdsize;
         }
         free(commands);
+    }
+    if(inspect&&main_load){
+        /* Fixed addresses verified in the preserved iOS 2.71.1 client only. */
+        uint64_t slide=main_load-0x100000000ULL;
+        unsigned char initialized=0;uint16_t command[2048]={0};
+        if(readmem(task,slide+0x108a3ae41ULL,&initialized,1))printf("FCommandLine initialized=%u\n",initialized);
+        if(readmem(task,slide+0x108a3ae42ULL,command,sizeof(command))){
+            printf("FCommandLine ASCII: ");
+            for(int i=0;i<2047&&command[i];i++)putchar(command[i]<128?(char)command[i]:'?');
+            putchar('\n');
+        }
+        mach_port_deallocate(mach_task_self(),task);return 0;
     }
     return 10;
 }
