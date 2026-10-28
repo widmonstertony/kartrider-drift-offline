@@ -188,6 +188,38 @@ int main(int argc,char **argv) {
         }
         uint64_t engine=0,contexts=0;int context_count=0;
         if(readmem(task,slide+0x108b0b288ULL,&engine,8)&&engine){
+            /* Engine subsystem collection: inspect only the independently
+               identified table/data-asset managers, never call their methods. */
+            uint64_t collection=0,entries=0;int entry_count=0;
+            if(readmem(task,engine+0xc60,&collection,8)&&collection&&
+               readmem(task,collection+0x10,&entries,8)&&
+               readmem(task,collection+0x18,&entry_count,4)&&entry_count>0&&entry_count<512){
+                for(int n=0;n<entry_count;n++){
+                    uint64_t cls=0,object=0,actual=0;char kind[1024]={0};
+                    if(!readmem(task,entries+n*24,&cls,8)||!cls)continue;
+                    objectname(task,slide,cls,kind,sizeof(kind));
+                    if(strcmp(kind,"TableManager")&&strcmp(kind,"DataAssetManager"))continue;
+                    if(!readmem(task,entries+n*24+8,&object,8)||!object||
+                       !readmem(task,object+0x10,&actual,8)||actual!=cls)continue;
+                    printf("EngineSubsystem %s object=0x%llx\n",kind,(unsigned long long)object);
+                    properties(task,slide,object,cls);
+                    if(!strcmp(kind,"TableManager")){
+                        uint64_t tables=0;int slots=0,free_slots=0;
+                        readmem(task,object+0x38,&tables,8);readmem(task,object+0x40,&slots,4);
+                        readmem(task,object+0x6c,&free_slots,4);
+                        printf("OriginalTables slots=%d free=%d\n",slots,free_slots);
+                        if(slots>0&&slots<1024)for(int t=0;t<slots;t++){
+                            unsigned char type=0;uint64_t table=0,tc=0;char name[1024]={0},table_class[1024]={0};
+                            readmem(task,tables+t*24,&type,1);readmem(task,tables+t*24+8,&table,8);
+                            if(!table||!readmem(task,table+0x10,&tc,8))continue;
+                            objectname(task,slide,tc,table_class,sizeof(table_class));
+                            if(strcmp(table_class,"DataTable"))continue;
+                            objectname(task,slide,table,name,sizeof(name));
+                            printf("  OriginalTable type=%u name=%s object=0x%llx\n",type,name,(unsigned long long)table);
+                        }
+                    }
+                }
+            }
             readmem(task,engine+0xc48,&contexts,8);
             readmem(task,engine+0xc50,&context_count,4);
             printf("GEngine=0x%llx contexts=%d\n",(unsigned long long)engine,context_count);
@@ -229,7 +261,7 @@ int main(int argc,char **argv) {
                     if(!readmem(task,actors+a*8,&actor,8)||!actor)continue;
                     objectname(task,slide,actor,actorname,sizeof(actorname));
                     readmem(task,actor+0x10,&cls,8);objectname(task,slide,cls,classname,sizeof(classname));
-                    if(a<3||strstr(classname,"Kart")||strstr(classname,"Controller")||strstr(classname,"GameMode")||strstr(classname,"GameState")||strstr(classname,"License")||strstr(classname,"Camera")||strstr(classname,"Pawn"))
+                    if(a<3||strstr(classname,"Kart")||strstr(classname,"Item")||strstr(classname,"Controller")||strstr(classname,"GameMode")||strstr(classname,"GameState")||strstr(classname,"License")||strstr(classname,"Camera")||strstr(classname,"Pawn"))
                         printf("Actor[%d] %s class=%s address=0x%llx\n",a,actorname,classname,(unsigned long long)actor);
                     if(!strcmp(classname,"LicensePawn")||!strcmp(classname,"LicenseGameState")||!strcmp(classname,"LicenseGameMode")||!strcmp(classname,"KdPlayerController")||strstr(classname,"Camera"))properties(task,slide,actor,cls);
                 }
@@ -250,6 +282,16 @@ int main(int argc,char **argv) {
                     uint8_t assist=0,auto_drive=0;
                     readmem(task,object+0xed6,&assist,1);readmem(task,object+0xedd,&auto_drive,1);
                     printf("MovementFlags assist=%u auto_drive=%u\n",assist,auto_drive);
+                    /* Verified against original iOS input handlers near
+                       0x10268cba8: input latch, steering, and drift state. */
+                    uint8_t input=0,state=0,held=0,request=0;float steering=0;
+                    readmem(task,object+0x188,&input,1);
+                    readmem(task,object+0x1e8,&steering,4);
+                    readmem(task,object+0xb70,&state,1);
+                    readmem(task,object+0xb78,&held,1);
+                    readmem(task,object+0xb8d,&request,1);
+                    printf("PlayerInput steering=%g drift_input=%u drift_state=%u drift_held=%u drift_request=%u\n",
+                           steering,input,state,held,request);
                 }
                 if(!strcmp(classname,"MajorResultWidgetComponent")){
                     uint64_t widget=0,provider=0,styler=0,style_table=0;
