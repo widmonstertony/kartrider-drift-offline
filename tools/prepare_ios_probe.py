@@ -1,6 +1,7 @@
 """Prepare an independently identified diagnostic copy; never edit the original app."""
 import argparse
 import plistlib
+import re
 import shutil
 import struct
 import subprocess
@@ -24,7 +25,15 @@ parser.add_argument('--enable-local-menu',action='store_true',help='Experimental
 parser.add_argument('--lobby-probe',action='store_true',help='Diagnostic original lobby with local debug account; original UI/profile flow remains incomplete')
 parser.add_argument('--initialize-local-profile',action='store_true',help='Experimental original initial inventory/equipment; does not implement saving')
 parser.add_argument('--unlock-local-catalog', action='store_true', help='Grant every retained original item definition locally; requires local profile initialization')
+parser.add_argument('--enable-local-garage', action='store_true', help='Experimental original local equipment updates and persistent preset save/restore')
+parser.add_argument('--bundle-id', default='org.kartdrift.preservation.offline', help='Independent test app identity')
+parser.add_argument('--display-name', default='漂移离线测试')
+parser.add_argument('--system-app-container', action='store_true', help='Require an isolated container when installing the test app as a rootless DEB')
 args=parser.parse_args()
+if not re.fullmatch(r'[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+', args.bundle_id):
+    parser.error('Invalid independent app bundle ID')
+if args.enable_local_garage and not args.initialize_local_profile:
+    parser.error('--enable-local-garage requires --initialize-local-profile')
 if args.unlock_local_catalog and not args.initialize_local_profile:
     parser.error('--unlock-local-catalog requires --initialize-local-profile')
 if not 1 <= args.players <= 4 or not 0 <= args.ais <= 7 or args.players + args.ais > 8:
@@ -48,10 +57,12 @@ if args.map and (not args.map.startswith('/Game/') or any(c in args.map for c in
 ROOT=Path(__file__).resolve().parents[1]
 OUT=ROOT/'runtime/ios-probe-patch'
 OUT.mkdir(parents=True,exist_ok=True)
-BUNDLE='org.kartdrift.preservation.offline'
+BUNDLE=args.bundle_id
 p=plistlib.loads((ROOT/'analysis/ios-Info.plist').read_bytes())
+if p.get('CFBundleIdentifier')==BUNDLE:
+    parser.error('Preserve the original app identity; choose a separate test bundle ID')
 p['CFBundleIdentifier']=BUNDLE
-p['CFBundleDisplayName']='漂移离线测试'
+p['CFBundleDisplayName']=args.display_name
 p['CFBundleName']='KartDrift Offline Probe'
 p.pop('CFBundleURLTypes',None)
 with (OUT/'Info.plist').open('wb') as f:plistlib.dump(p,f)
@@ -94,7 +105,13 @@ if args.lobby_probe:
     from enable_ios_local_lobby_probe import patch
     patch(OUT/'KartDrift',OUT/'KartDrift-lobby')
     (OUT/'KartDrift-lobby').replace(OUT/'KartDrift')
+if args.enable_local_garage:
+    from enable_ios_local_garage import patch
+    patch(OUT/'KartDrift',OUT/'KartDrift-garage')
+    (OUT/'KartDrift-garage').replace(OUT/'KartDrift')
 ent={'application-identifier':BUNDLE,'get-task-allow':True}
+if args.system_app_container:
+    ent['com.apple.private.security.container-required']=True
 with (OUT/'entitlements.plist').open('wb') as f:plistlib.dump(ent,f)
 subprocess.run(['ldid','-S'+str(OUT/'entitlements.plist'),str(OUT/'KartDrift')],check=True)
 maps={'training':'/Game/ART/Env/Stage_License/License_T01/License_T01',
@@ -112,6 +129,7 @@ if args.lobby_probe:
 (OUT/'ue4commandline.txt').write_text('../../../KartDrift/KartDrift.uproject '+selected_map+options+' -NoSplash -log -stdout -FullStdOutLogOutput ')
 subprocess.run(['xcrun','--sdk','iphoneos','clang','-arch','arm64','-miphoneos-version-min=15.0',
     '-dynamiclib','-fobjc-arc',*(['-DOFFLINE_LOCAL_MENU'] if args.enable_local_menu else []),
+    *(['-DOFFLINE_LOCAL_SAVES'] if args.enable_local_garage else []),
     *(['-DOFFLINE_LOCAL_PROFILE'] if args.initialize_local_profile else []),
     *(['-DOFFLINE_UNLOCK_LOCAL_CATALOG'] if args.unlock_local_catalog else []),
     '-framework','Foundation','-framework','UIKit','-framework','CoreGraphics',

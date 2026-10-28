@@ -1,7 +1,8 @@
 /* Experimental initialization of the retained app's original local inventory.
    Item IDs and the equipment preset come from its own KtInitialDef table.
    Optional catalog grants use the same retained original item definitions.
-   This is not persistent saving or a replacement garage interface. */
+   OFFLINE_LOCAL_SAVES adds local preset persistence using original interfaces.
+   The garage interface remains the original client's own widgets. */
 #import <CommonCrypto/CommonDigest.h>
 
 static BOOL profile_verified(void) {
@@ -83,6 +84,10 @@ static NSArray *profile_catalog(uint64_t tables) {
 }
 #endif
 
+#ifdef OFFLINE_LOCAL_SAVES
+#include "offline_save.m"
+#endif
+
 static void profile_initialize(void) {
     static uint64_t initialized_account=0;
     uint64_t slide=probe_slide(),engine=profile_u64(slide+0x108b0b288ULL);
@@ -92,8 +97,14 @@ static void profile_initialize(void) {
        ![probe_name(profile_u64(profile_u64(world+0x118)+0x10)) isEqualToString:@"OutGameMode"])return;
     uint64_t account=profile_u64(profile_u64(profile_u64(world+0x180)+0x1b8)+0x50);
     unsigned char logged=0,debug=0,platform=0;
-    if(!account||account==initialized_account||!probe_read(account+0x181,&logged,1)||logged!=1||
+    if(!account||!probe_read(account+0x181,&logged,1)||logged!=1||
        !probe_read(account+0x1a0,&debug,1)||debug!=1||!probe_read(account+0x550,&platform,1)||platform!=6)return;
+    if(account==initialized_account) {
+#ifdef OFFLINE_LOCAL_SAVES
+        uint64_t current=profile_subsystem(account+0x28,@"AccountPreset");if(current)save_tick(current);
+#endif
+        return;
+    }
     uint64_t inventory=profile_subsystem(account+0x28,@"AccountInventory");
     uint64_t preset=profile_subsystem(account+0x28,@"AccountPreset");
     uint64_t tables=profile_subsystem(profile_u64(engine+0xc60),@"TableManager");
@@ -137,6 +148,10 @@ static void profile_initialize(void) {
         ((void(*)(void *,uint8_t,const void *,const void *))(slide+0x102d63ba0ULL))((void *)inventory,[entry[2] unsignedCharValue],&value,&item);
     }
     if(!has_equipment)((void(*)(void *,const void *))(slide+0x102d87a60ULL))((void *)preset,(void *)(row+0x18));
+#ifdef OFFLINE_LOCAL_SAVES
+    NSMutableSet *known=[NSMutableSet set];for(NSArray *entry in parsed)[known addObject:entry[0]];save_known_items=known;
+    save_restore(preset);save_tick(preset);
+#endif
     initialized_account=account;
 #ifdef OFFLINE_UNLOCK_LOCAL_CATALOG
     record([NSString stringWithFormat:@"local catalog granted original definitions=%lu preserved_equipment=%d",(unsigned long)catalog.count,has_equipment]);
@@ -151,7 +166,11 @@ static void profile_initialize(void) {
 }
 
 static void start_local_profile(void) {
-    [NSTimer scheduledTimerWithTimeInterval:2 repeats:YES block:^(NSTimer *timer){
+    NSTimeInterval interval=2;
+#ifdef OFFLINE_LOCAL_SAVES
+    interval=0.25;
+#endif
+    [NSTimer scheduledTimerWithTimeInterval:interval repeats:YES block:^(NSTimer *timer){
         if(!profile_verified())return;
         BOOL (^task)(void)=^BOOL {@autoreleasepool {profile_initialize();}return YES;};
         ((void(*)(id,SEL,id))objc_msgSend)(NSClassFromString(@"FIOSAsyncTask"),NSSelectorFromString(@"CreateTaskWithBlock:"),task);

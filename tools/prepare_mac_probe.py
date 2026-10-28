@@ -31,7 +31,10 @@ def main():
     parser.add_argument('--bundle-id', default='org.kartdrift.preservation.mac', help='Independent diagnostic app identity')
     parser.add_argument('--display-name', default='漂移离线 Mac 测试')
     parser.add_argument('--chunks', default='1,2,3,4,6,8,10,11,13,14,18,41')
+    parser.add_argument('--enable-local-garage', action='store_true', help='Compile experimental local preset saves; requires the patched original garage entries')
     args = parser.parse_args()
+    if args.enable_local_garage and not args.initialize_local_profile:
+        parser.error('--enable-local-garage requires --initialize-local-profile')
     if args.unlock_local_catalog and not args.initialize_local_profile:
         parser.error('--unlock-local-catalog requires --initialize-local-profile')
     if not re.fullmatch(r'[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+',args.bundle_id):
@@ -44,6 +47,12 @@ def main():
     for source in [args.original_app/'Info.plist', args.patch/'KartDrift', args.patch/'ue4commandline.txt']:
         if not source.is_file():
             parser.error('Required local input is missing: '+str(source))
+    if args.enable_local_garage:
+        from enable_ios_local_results import branch
+        main_binary=(args.patch/'KartDrift').read_bytes()
+        for entry,cave in [(0x2D61CB8,0x3200),(0x2D61E60,0x3300)]:
+            if main_binary[entry:entry+4]!=branch(entry,cave):
+                parser.error('--enable-local-garage requires matching patched original garage entries')
     if args.initialize_local_profile and 'KartDrift.OutGameMode' not in (args.patch/'ue4commandline.txt').read_text():
         parser.error('--initialize-local-profile requires the original lobby probe')
     for chunk in chunks:
@@ -60,6 +69,7 @@ def main():
         frameworks = str(sdk/'System/iOSSupport/System/Library/Frameworks')
         run('xcrun', '--sdk', 'macosx', 'clang', '-target', 'arm64-apple-ios15.0-macabi',
             '-dynamiclib', '-fobjc-arc', *(['-DOFFLINE_LOCAL_MENU'] if args.enable_local_menu else []), '-iframework', frameworks, '-F'+frameworks,
+            *(['-DOFFLINE_LOCAL_SAVES'] if args.enable_local_garage else []),
             *(['-DOFFLINE_LOCAL_PROFILE'] if args.initialize_local_profile else []),
             *(['-DOFFLINE_UNLOCK_LOCAL_CATALOG'] if args.unlock_local_catalog else []),
             '-framework', 'Foundation', '-framework', 'UIKit', '-framework', 'CoreGraphics',
@@ -99,7 +109,7 @@ def main():
         # vtool/install_name_tool clear header padding. Our guarded iOS
         # patches use a small verified part of that padding for ARM64 stubs.
         # Preserve it after all load-command edits and before signing.
-        probe_stubs = data[0x3000:0x3200] if path == args.output/'KartDrift' else None
+        probe_stubs = data[0x3000:0x3400] if path == args.output/'KartDrift' else None
         position = 32
         for _ in range(struct.unpack_from('<I', data, 16)[0]):
             command, size = struct.unpack_from('<II', data, position)
@@ -119,10 +129,10 @@ def main():
             converted_data = bytearray(path.read_bytes())
             if 32+struct.unpack_from('<I', converted_data, 20)[0] > 0x3000:
                 raise ValueError('Converted load commands overlap probe stubs')
-            converted_data[0x3000:0x3200] = probe_stubs
+            converted_data[0x3000:0x3400] = probe_stubs
             path.write_bytes(converted_data)
         run('codesign', '--force', '--sign', '-', str(path))
-        if probe_stubs is not None and path.read_bytes()[0x3000:0x3200] != probe_stubs:
+        if probe_stubs is not None and path.read_bytes()[0x3000:0x3400] != probe_stubs:
             raise ValueError('Signing changed probe stubs')
         binaries.append(str(path.relative_to(args.output)))
     # Nested code is signed before the outer bundle; retain no mobile grants.
