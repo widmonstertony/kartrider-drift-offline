@@ -10,7 +10,7 @@ def main():
     p.add_argument('--resources',required=True,help='Device path to the retained PUB/Resource directory')
     p.add_argument('--patch-zip',required=True,help='Uploaded patch ZIP path returned by /upload_file')
     p.add_argument('--work',required=True,help='New directory inside the iOS MCP upload cache')
-    p.add_argument('--chunks',default='1,2,3,14',help='Resource chunk numbers, separated by commas')
+    p.add_argument('--chunks',default='1,2,3,11,14',help='Resource chunk numbers, separated by commas; chunk 11 contains common race/checkpoint assets')
     a=p.parse_args()
     work=PurePosixPath(a.work)
     allowed=PurePosixPath('/var/mobile/Library/Caches/ios-mcp-uploads')
@@ -30,6 +30,9 @@ unzip -oq {q(a.patch_zip)} -d patch
 cp patch/KartDrift patch/Info.plist patch/ue4commandline.txt Payload/KartDrift.app/
 cp patch/OfflineProbe.dylib Payload/KartDrift.app/Frameworks/
 cp -R patch/Frameworks/. Payload/KartDrift.app/Frameworks/
+if test -d patch/OfflineMetadata; then
+    cp -R patch/OfflineMetadata Payload/KartDrift.app/
+fi
 chmod 755 Payload/KartDrift.app/KartDrift
 rm -rf Payload/KartDrift.app/SC_Info Payload/KartDrift.app/_CodeSignature
 '''

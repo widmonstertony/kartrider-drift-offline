@@ -12,11 +12,14 @@
     "Works locally without the discontinued production servers",
     "Player can drive and drift in a solo race",
     "Player can race against functioning AI opponents",
-    "Evidence of actual interactive gameplay, not just a splash screen or static asset view"
+    "Evidence of actual interactive gameplay, not just a splash screen or static asset view",
+    "Original gameplay, art, sound, physics and controls retained; no substitute kart simulator",
+    "Both speed and item races run locally with multiple AI, working laps, finish and results",
+    "Item races include functioning original items; no online multiplayer mode"
   ],
   "intermediate_milestone": "Load the retained iOS training map and establish local player control",
   "preservation": "Keep original installed app and data; modify and test an independent copy",
-  "status": "On an iPadOS 16.1 device, the preserved original Drift iOS engine loads License_T01 with original free-practice HUD and driving components. Guarded primary-asset and kart-mesh lookup patches load Kartbody_Practice and Mesh_Practice. The original kart renders, reports nonzero speed, changes position, and responds to touchscreen steering: measured heading changes from about -17 to 108 degrees after steering input. Character display, scene/camera behavior, drifting, and complete AI races remain unresolved or unverified. No iPhone test is verified. Android 2.71.1 with 5 APK splits and 26 cached PAKs is backed up with matching hashes; its native libUE4 matches the analysis binary. The unchanged Android client stops at network error 80002. The 2004 PC demo is preserved and static analysis started; no native mobile/macOS port is verified.",
+  "status": "The preserved iOS 2.71.1 client now loads Village_I01 in original SpeedSingleGameMode with one original player and three original RaceAiPawn/AIController opponents marked as AI. Original LoadItemListRule loads Dao, Cotton kart, animations and effects; the scene and race HUD render and phase reaches BeginRace. Original player vehicle drives. A guarded path-driver preservation patch resolves assist initialization destroying FollowTG; two independent position samples confirm all three original AI opponents continuously driving. Checkpoint initialization has no actors because the test IPA omitted pakchunk11, which contains the original BP_CheckPoint assets. That retained chunk and all four matching shader libraries are being included for another real-device test. No AI finish is verified. Screenshot orientation/camera, drifting, full AI races and item mode remain unverified. Device is an iPadOS 16.1 iPad, not an iPhone. Android and 2004 PC originals are preserved; no offline Android or native macOS/PC port is verified.",
   "implementation": {
     "source": "Reverse engineer and modify the preserved original client; do not substitute a newly written kart game. Write our analysis and patch tooling ourselves.",
     "allowed_research": "Study publicly described principles and validate behavior; implement our own code",

@@ -9,7 +9,25 @@ from pathlib import Path
 parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--enable-commandline-map',action='store_true',help='Apply the verified 2.71.1 startup pointer patch; offline play remains unverified')
 parser.add_argument('--restore-preserved-metadata',action='store_true',help='Include small retained PUB version files for restoration inside the test app sandbox')
+parser.add_argument('--race-mode',choices=('training','speed','item'),default='training')
+parser.add_argument('--map',help='Original /Game/... map path; defaults to License_T01 or Village_I01')
+parser.add_argument('--players',type=int,default=1)
+parser.add_argument('--ais',type=int,default=0)
+parser.add_argument('--enable-asset-load',action='store_true')
+parser.add_argument('--load-kart-mesh',action='store_true')
+parser.add_argument('--enable-local-ai',action='store_true')
+parser.add_argument('--preserve-ai-path-driver',action='store_true')
 args=parser.parse_args()
+if not 1 <= args.players <= 4 or not 0 <= args.ais <= 7 or args.players + args.ais > 8:
+    parser.error('Use 1–4 players and 0–7 AI, with at most 8 total racers')
+if args.ais and not args.enable_local_ai:
+    parser.error('--ais requires --enable-local-ai for direct offline map launches')
+if args.preserve_ai_path_driver and not args.enable_local_ai:
+    parser.error('--preserve-ai-path-driver requires --enable-local-ai')
+if args.load_kart_mesh and not args.enable_asset_load:
+    parser.error('--load-kart-mesh requires --enable-asset-load')
+if args.map and (not args.map.startswith('/Game/') or any(c in args.map for c in '? \t\n\r')):
+    parser.error('--map must be one original /Game/... path without URL options')
 ROOT=Path(__file__).resolve().parents[1]
 OUT=ROOT/'runtime/ios-probe-patch'
 OUT.mkdir(parents=True,exist_ok=True)
@@ -35,10 +53,26 @@ if args.enable_commandline_map:
     from enable_ios_map_override import patch
     patch(OUT/'KartDrift',OUT/'KartDrift-map')
     (OUT/'KartDrift-map').replace(OUT/'KartDrift')
+if args.enable_asset_load:
+    from enable_ios_asset_load import patch
+    patch(OUT/'KartDrift',OUT/'KartDrift-assets',load_kart_mesh=args.load_kart_mesh)
+    (OUT/'KartDrift-assets').replace(OUT/'KartDrift')
+if args.enable_local_ai:
+    from enable_ios_local_ai import patch
+    patch(OUT/'KartDrift',OUT/'KartDrift-ai',preserve_path_driver=args.preserve_ai_path_driver)
+    (OUT/'KartDrift-ai').replace(OUT/'KartDrift')
 ent={'application-identifier':BUNDLE,'get-task-allow':True}
 with (OUT/'entitlements.plist').open('wb') as f:plistlib.dump(ent,f)
 subprocess.run(['ldid','-S'+str(OUT/'entitlements.plist'),str(OUT/'KartDrift')],check=True)
-(OUT/'ue4commandline.txt').write_text('../../../KartDrift/KartDrift.uproject /Game/ART/Env/Stage_License/License_T01/License_T01?game=/Script/KartDrift.LicenseGameMode?License=L00?players=1 -NoSplash -log -stdout -FullStdOutLogOutput ')
+maps={'training':'/Game/ART/Env/Stage_License/License_T01/License_T01',
+      'speed':'/Game/ART/Env/Theme_Village/village_I01/Village_I01',
+      'item':'/Game/ART/Env/Theme_Village/village_I01/Village_I01'}
+modes={'training':'LicenseGameMode','speed':'SpeedSingleGameMode','item':'ItemSingleGameMode'}
+options=f'?game=/Script/KartDrift.{modes[args.race_mode]}'
+if args.race_mode=='training':
+    options+='?License=L00'
+options+=f'?players={args.players}?ais={args.ais}?observers=0'
+(OUT/'ue4commandline.txt').write_text('../../../KartDrift/KartDrift.uproject '+(args.map or maps[args.race_mode])+options+' -NoSplash -log -stdout -FullStdOutLogOutput ')
 shutil.copy2(ROOT/'tools/OfflineProbe.dylib',OUT/'OfflineProbe.dylib')
 frameworks=ROOT/'runtime/ios-original/KartDrift.app/Frameworks'
 for source in frameworks.rglob('*'):

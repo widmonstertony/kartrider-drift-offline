@@ -9,7 +9,9 @@
 - 地图入口补丁已在原进程验证：当前世界为 `License_T01`，已生成原版驾照模式、玩家控制器和赛车对象；11 个关卡层已载入，原版组件报告子关卡加载完成。
 - 显式设置 `?players=1` 后，原版自由练习 HUD、触屏按钮和部分场景可见；原版驾驶、相机、漂移与音效组件已生成。默认零玩家会使驾驶组件初始化停在较早阶段。
 - 资源查询与模型应用补丁已在真机验证：原版 `Kartbody_Practice` 与 `Mesh_Practice` 加载并显示，原版速度表有非零速度，车辆位置随原引擎运行而变化；触屏方向键输入后，赛车朝向从约 −17° 变为 108°。
-- 验证设备为 iPadOS 16.1 真机，尚未在 iPhone 验证。角色显示、场景与相机仍有问题；漂移和完整 AI 比赛尚未验证，不能视为可交付的完整离线版本。
+- 竞速赛入口现已进入原版 `Village_I01` / `SpeedSingleGameMode`：原版皮蛋角色、Cotton 赛车、村落场景、竞赛 HUD 和四名选手列表可见，原版比赛阶段已到 `BeginRace`。
+- 本地槽位诊断补丁已生成三名原版 `RaceAiPawn`、各自的原版 `AIController`，并设置原版 `PawnState.bIsAiPlayer`。原版资源加载规则加载了赛车、角色与动画。修正辅助驾驶初始化冲突后，三名 AI 的原版 FollowTG 路径驾驶组件保持有效；两次独立位置采样确认三名对手均持续在原版赛道行驶。
+- 验证设备为 iPadOS 16.1 真机，尚未在 iPhone 验证。检查点公共蓝图位于 `pakchunk11`，此前测试包遗漏了该包，导致原版检查点没有生成；正在补入原资源重测。截图方向及相机、漂移、AI 完赛与道具赛仍未验证，不能视为可交付的完整离线版本。
 - 原版：已获取并静态提取 2004 年 PC 演示客户端，81 个文件、65 个 RHO 档案；已开始反编译原程序。演示客户端不代表完整历代服务端和游戏功能。
 - **两个原客户端均未通过离线可玩验收。**
 
@@ -29,11 +31,15 @@
 
 `tools/ghidra/DecompileTargets.java` 用于对本机二进制的指定地址范围反编译；输出保存在本机。地址采用 Ghidra 导入后的虚拟地址，ELF 需要注意加载器的重定位。对已确认不会返回的调用（例如栈保护失败入口），可传入 `--noreturn=地址`，避免反编译器将后续函数错误并入当前函数。
 
-`tools/read_kartdrift_task.c --inspect` 可只读检查保留的 iOS 2.71.1 进程：命令行、当前世界、原版对象、反射属性与完整组件集合。`--inspect 对象地址` 可读取指定对象；`--threads` 可采样线程调用栈。地址与布局只针对已分析版本，不能直接套用其他客户端。
+`tools/read_kartdrift_task.c --inspect` 可只读检查保留的 iOS 2.71.1 进程：命令行、当前世界、原版对象、反射属性与完整组件集合。`--inspect 对象地址 ...` 可读取多个指定对象；`--threads` 可采样线程调用栈。地址与布局只针对已分析版本，不能直接套用其他客户端。
 
 `tools/enable_ios_asset_load.py` 是独立的资源加载诊断补丁：核对原版函数的哈希，将主资源对象查询中的一次 `ResolveObject` 调用改为原引擎的 `TryLoad`。可选 `--load-kart-mesh` 会额外核对车辆模型应用函数，再修改该函数内的一次查询调用；该组合已在保留版本的测试副本中加载原版练习车并响应转向输入。它会改变资源查询行为，可能产生同步加载停顿；不代表已恢复完整游戏。
 
 `tools/android_mcp.py` 可连接用户授权的 Android MCP。连接配置通过 `ANDROID_MCP_CONFIG` 指向本地 JSON，或放在忽略的 `runtime/android-device.json` 中，字段为 `url`、`token`，可选 `session`。令牌、设备地址和会话不放入公开源码。
+
+`tools/enable_ios_local_ai.py` 是本地 AI 初始化实验：校验原版函数哈希后，按 `players` 参数划分真人与 AI 槽位，并将相同划分写入原版 PawnState。`--preserve-path-driver` 额外实验性保留原版 FollowTG 路径驾驶组件，使玩家辅助驾驶设置不再销毁它。它只修改独立副本，需重新签名；该组合已在真机确认三名 AI 持续行驶，但尚未验证完赛。
+
+测试副本构建可选择 `--race-mode speed` 或 `--race-mode item`，配合 `--enable-commandline-map --enable-asset-load --load-kart-mesh --enable-local-ai --preserve-ai-path-driver --players 1 --ais 3`。这些选项用于复现实验，不代表两个模式已经通过验收。设备组包工具 `tools/build_device_ipa.py` 的公共资源应包含 chunk 11，村落赛道还需要 chunk 41；地图 PAK 与对应的全部 metallib 必须一并保留。
 
 ## 已停止的替代游戏实验
 
