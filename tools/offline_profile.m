@@ -1,5 +1,6 @@
 /* Experimental initialization of the retained app's original local inventory.
    Item IDs and the equipment preset come from its own KtInitialDef table.
+   Optional catalog grants use the same retained original item definitions.
    This is not persistent saving or a replacement garage interface. */
 #import <CommonCrypto/CommonDigest.h>
 
@@ -50,6 +51,38 @@ static NSString *profile_string(uint64_t address) {
     return [[NSString alloc] initWithCharacters:value length:count-1];
 }
 
+#ifdef OFFLINE_UNLOCK_LOCAL_CATALOG
+static NSArray *profile_catalog(uint64_t tables) {
+    uint64_t data=profile_u64(tables+0x38),table=0;
+    int32_t count=profile_i32(tables+0x40);if(count<1||count>128)return nil;
+    for(int32_t i=0;i<count;i++) {
+        uint64_t candidate=profile_u64(data+i*24+8);
+        if([probe_name(candidate) isEqualToString:@"KtItemTable"]){table=candidate;break;}
+    }
+    uint64_t structure=profile_u64(table+0x28);
+    if(!table||![probe_name(structure) isEqualToString:@"KtClientInventoryDef"]||profile_i32(table+0x38)!=1)return nil;
+    // Original reflected KtClientItemDef records, including the KtItemDef base.
+    uint64_t field=profile_u64(structure+0x50),item_structure=0;
+    for(unsigned i=0;field&&i<128;i++,field=profile_u64(field+0x20)) {
+        if([probe_fname(field+0x28) isEqualToString:@"itemDefVector"]) {
+            item_structure=profile_u64(profile_u64(field+0x78)+0x78);break;
+        }
+    }
+    if(![probe_name(item_structure) isEqualToString:@"KtClientItemDef"]||profile_i32(item_structure+0x58)!=152)return nil;
+    uint64_t row=profile_u64(profile_u64(table+0x30)+8),items=profile_u64(row+0x18);
+    int32_t item_count=profile_i32(row+0x20);if(!row||!items||item_count<1||item_count>20000)return nil;
+    NSMutableArray *result=[NSMutableArray arrayWithCapacity:item_count];
+    NSCharacterSet *invalid=[[NSCharacterSet characterSetWithCharactersInString:@"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789:_"] invertedSet];
+    for(int32_t i=0;i<item_count;i++) {
+        uint64_t entry=items+i*152;NSString *key=profile_string(entry+8);unsigned char type=0;
+        if(!key||key.length>127||[key rangeOfCharacterFromSet:invalid].location!=NSNotFound||
+           ![key containsString:@":"]||!probe_read(entry,&type,1)||type>6)return nil;
+        [result addObject:@[key,@1,@(type)]];
+    }
+    return result;
+}
+#endif
+
 static void profile_initialize(void) {
     static uint64_t initialized_account=0;
     uint64_t slide=probe_slide(),engine=profile_u64(slide+0x108b0b288ULL);
@@ -66,7 +99,10 @@ static void profile_initialize(void) {
     uint64_t tables=profile_subsystem(profile_u64(engine+0xc60),@"TableManager");
     if(!inventory||!preset||!tables)return;
     // Do not replace an existing original equipped preset.
-    if(profile_i32(preset+0xa0)>0){initialized_account=account;record(@"local profile kept existing original equipment");return;}
+    BOOL has_equipment=profile_i32(preset+0xa0)>0;
+#ifndef OFFLINE_UNLOCK_LOCAL_CATALOG
+    if(has_equipment){initialized_account=account;record(@"local profile kept existing original equipment");return;}
+#endif
     uint64_t data=profile_u64(tables+0x38),table=0,row=0;
     int32_t count=profile_i32(tables+0x40);if(count<1||count>128)return;
     for(int32_t i=0;i<count;i++) {
@@ -87,17 +123,24 @@ static void profile_initialize(void) {
         NSScanner *scanner=[NSScanner scannerWithString:amount];int quantity=0;
         if(key.length>127||[key rangeOfCharacterFromSet:invalid].location!=NSNotFound||
            ![key containsString:@":"]||![scanner scanInt:&quantity]||!scanner.isAtEnd||quantity<1||quantity>1000000)return;
-        [parsed addObject:@[key,@(quantity)]];
+        [parsed addObject:@[key,@(quantity),@2]];
     }
+#ifdef OFFLINE_UNLOCK_LOCAL_CATALOG
+    NSArray *catalog=profile_catalog(tables);if(!catalog)return;
+    NSMutableArray *all=[NSMutableArray arrayWithArray:catalog];[all addObjectsFromArray:parsed];parsed=all;
+#endif
     // The original setter copies FString and maintains category indexes.
     for(NSArray *entry in parsed) {
         NSString *key=entry[0];unichar buffer[128]={0};[key getCharacters:buffer range:NSMakeRange(0,key.length)];
         struct { const unichar *data;int32_t count,capacity; } value={buffer,(int32_t)key.length+1,(int32_t)key.length+1};
         struct { int32_t count,padding;int64_t expires; } item={[entry[1] intValue],0,0};
-        ((void(*)(void *,uint8_t,const void *,const void *))(slide+0x102d63ba0ULL))((void *)inventory,2,&value,&item);
+        ((void(*)(void *,uint8_t,const void *,const void *))(slide+0x102d63ba0ULL))((void *)inventory,[entry[2] unsignedCharValue],&value,&item);
     }
-    ((void(*)(void *,const void *))(slide+0x102d87a60ULL))((void *)preset,(void *)(row+0x18));
+    if(!has_equipment)((void(*)(void *,const void *))(slide+0x102d87a60ULL))((void *)preset,(void *)(row+0x18));
     initialized_account=account;
+#ifdef OFFLINE_UNLOCK_LOCAL_CATALOG
+    record([NSString stringWithFormat:@"local catalog granted original definitions=%lu preserved_equipment=%d",(unsigned long)catalog.count,has_equipment]);
+#endif
     record([NSString stringWithFormat:@"local profile initialized original initial inventory items=%d equipment=%d main_thread=%d",item_count,equip_count,NSThread.isMainThread]);
     // Re-enter the same original lobby so its original BeginPlay reads the
     // populated account. The GameInstance/account persists across this travel.

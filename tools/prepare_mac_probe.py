@@ -27,10 +27,13 @@ def main():
     parser.add_argument('--probe-dylib', type=Path, help='Optional separately compiled Catalyst diagnostic library')
     parser.add_argument('--enable-local-menu', action='store_true', help='Require the matching automatic result-factory patch')
     parser.add_argument('--initialize-local-profile', action='store_true', help='Experimental original initial inventory/equipment; no persistent saving')
+    parser.add_argument('--unlock-local-catalog', action='store_true', help='Grant every retained original item definition locally; requires local profile initialization')
     parser.add_argument('--bundle-id', default='org.kartdrift.preservation.mac', help='Independent diagnostic app identity')
     parser.add_argument('--display-name', default='漂移离线 Mac 测试')
     parser.add_argument('--chunks', default='1,2,3,4,6,8,10,11,13,14,18,41')
     args = parser.parse_args()
+    if args.unlock_local_catalog and not args.initialize_local_profile:
+        parser.error('--unlock-local-catalog requires --initialize-local-profile')
     if not re.fullmatch(r'[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+',args.bundle_id):
         parser.error('Invalid diagnostic bundle identifier')
     if args.output.exists() or args.output.suffix != '.app':
@@ -58,6 +61,7 @@ def main():
         run('xcrun', '--sdk', 'macosx', 'clang', '-target', 'arm64-apple-ios15.0-macabi',
             '-dynamiclib', '-fobjc-arc', *(['-DOFFLINE_LOCAL_MENU'] if args.enable_local_menu else []), '-iframework', frameworks, '-F'+frameworks,
             *(['-DOFFLINE_LOCAL_PROFILE'] if args.initialize_local_profile else []),
+            *(['-DOFFLINE_UNLOCK_LOCAL_CATALOG'] if args.unlock_local_catalog else []),
             '-framework', 'Foundation', '-framework', 'UIKit', '-framework', 'CoreGraphics',
             str(Path(__file__).with_name('offline_probe.m')), '-o', str(probe))
     if (args.patch/'OfflineMetadata').exists():

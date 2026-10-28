@@ -30,11 +30,11 @@ static uint64_t probe_slide(void) {
     return UINT64_MAX;
 }
 
-static NSString *probe_name(uint64_t object) {
+static NSString *probe_fname(uint64_t address) {
     uint32_t name[2]={0};uint64_t block=0;uint16_t header=0;
     uint64_t slide=probe_slide();
     if(slide==UINT64_MAX)return @"?";
-    if(!probe_read(object+0x18,name,8) || !probe_read(slide+0x108837ec0ULL+0xd0+(name[0]>>16)*8,&block,8))return @"?";
+    if(!probe_read(address,name,8) || !probe_read(slide+0x108837ec0ULL+0xd0+(name[0]>>16)*8,&block,8))return @"?";
     uint64_t entry=block+(name[0]&65535)*2;
     if(!probe_read(entry,&header,2))return @"?";
     NSUInteger length=header>>6;
@@ -43,6 +43,8 @@ static NSString *probe_name(uint64_t object) {
     if(!probe_read(entry+2,text,length*((header&1)?2:1)))return @"?";
     return [[NSString alloc] initWithBytes:text length:length*((header&1)?2:1) encoding:(header&1)?NSUTF16LittleEndianStringEncoding:NSUTF8StringEncoding] ?: @"?";
 }
+
+static NSString *probe_name(uint64_t object) { return probe_fname(object+0x18); }
 
 static void record(NSString *message) {
     if(!message)message=@"(no message)";

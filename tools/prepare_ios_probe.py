@@ -23,7 +23,10 @@ parser.add_argument('--enable-local-replay',action='store_true')
 parser.add_argument('--enable-local-menu',action='store_true',help='Experimental local speed/item selection using original engine travel')
 parser.add_argument('--lobby-probe',action='store_true',help='Diagnostic original lobby with local debug account; original UI/profile flow remains incomplete')
 parser.add_argument('--initialize-local-profile',action='store_true',help='Experimental original initial inventory/equipment; does not implement saving')
+parser.add_argument('--unlock-local-catalog', action='store_true', help='Grant every retained original item definition locally; requires local profile initialization')
 args=parser.parse_args()
+if args.unlock_local_catalog and not args.initialize_local_profile:
+    parser.error('--unlock-local-catalog requires --initialize-local-profile')
 if not 1 <= args.players <= 4 or not 0 <= args.ais <= 7 or args.players + args.ais > 8:
     parser.error('Use 1–4 players and 0–7 AI, with at most 8 total racers')
 if args.ais and not args.enable_local_ai:
@@ -110,6 +113,7 @@ if args.lobby_probe:
 subprocess.run(['xcrun','--sdk','iphoneos','clang','-arch','arm64','-miphoneos-version-min=15.0',
     '-dynamiclib','-fobjc-arc',*(['-DOFFLINE_LOCAL_MENU'] if args.enable_local_menu else []),
     *(['-DOFFLINE_LOCAL_PROFILE'] if args.initialize_local_profile else []),
+    *(['-DOFFLINE_UNLOCK_LOCAL_CATALOG'] if args.unlock_local_catalog else []),
     '-framework','Foundation','-framework','UIKit','-framework','CoreGraphics',
     str(ROOT/'tools/offline_probe.m'),'-o',str(OUT/'OfflineProbe.dylib')],check=True)
 subprocess.run(['ldid','-S',str(OUT/'OfflineProbe.dylib')],check=True)
