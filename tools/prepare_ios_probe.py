@@ -1,10 +1,15 @@
 """Prepare an independently identified diagnostic copy; never edit the original app."""
+import argparse
 import plistlib
 import shutil
 import struct
 import subprocess
 from pathlib import Path
 
+parser=argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--enable-commandline-map',action='store_true',help='Apply the verified 2.71.1 startup pointer patch; offline play remains unverified')
+parser.add_argument('--restore-preserved-metadata',action='store_true',help='Include small retained PUB version files for restoration inside the test app sandbox')
+args=parser.parse_args()
 ROOT=Path(__file__).resolve().parents[1]
 OUT=ROOT/'runtime/ios-probe-patch'
 OUT.mkdir(parents=True,exist_ok=True)
@@ -26,6 +31,10 @@ assert not any(binary[end:end+len(cmd)]),'No header padding available'
 binary[end:end+len(cmd)]=cmd
 struct.pack_into('<II',binary,16,ncmds+1,sizeofcmds+len(cmd))
 (OUT/'KartDrift').write_bytes(binary)
+if args.enable_commandline_map:
+    from enable_ios_map_override import patch
+    patch(OUT/'KartDrift',OUT/'KartDrift-map')
+    (OUT/'KartDrift-map').replace(OUT/'KartDrift')
 ent={'application-identifier':BUNDLE,'get-task-allow':True}
 with (OUT/'entitlements.plist').open('wb') as f:plistlib.dump(ent,f)
 subprocess.run(['ldid','-S'+str(OUT/'entitlements.plist'),str(OUT/'KartDrift')],check=True)
@@ -40,5 +49,14 @@ for source in frameworks.rglob('*'):
     dest=OUT/'Frameworks'/rel;dest.parent.mkdir(parents=True,exist_ok=True)
     shutil.copy2(source,dest)
     subprocess.run(['ldid','-S',str(dest)],check=True)
+if args.restore_preserved_metadata:
+    data=ROOT/'runtime/ios-preserved-data'
+    metadata=list((data/'Library/Application Support/PUB/Patch').glob('*'))
+    metadata += [data/'Library/Application Support/PUB/Resource/res_ver',data/'Library/Application Support/PUB/Resource/pb_patch_version']
+    for source in metadata:
+        if source.is_file() and source.stat().st_size<500000:
+            destination=OUT/'OfflineMetadata'/source.relative_to(data)
+            destination.parent.mkdir(parents=True,exist_ok=True)
+            shutil.copy2(source,destination)
 shutil.make_archive(str(ROOT/'runtime/ios-probe-patch'),'zip',OUT)
 print(ROOT/'runtime/ios-probe-patch.zip')

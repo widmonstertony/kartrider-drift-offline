@@ -17,6 +17,9 @@
 !/tools/*.c
 !/tools/*.m
 !/tools/*.plist
+!/tools/ghidra/
+/tools/ghidra/*
+!/tools/ghidra/*.java
 /tools/assemble_device_probe.py
 /tools/assemble_device_probe_v2.py
 __pycache__/
