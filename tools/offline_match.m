@@ -49,8 +49,21 @@ static void match_tick(uint64_t world,uint64_t account) {
     map=track_match_path(type);
     if(!map){record(@"local match rejected unavailable selected track");return;}
 #endif
-    NSString *kind=type==0?@"SpeedSingleGameMode":@"ItemSingleGameMode";
-    NSString *options=[NSString stringWithFormat:@"game=/Script/KartDrift.%@?players=1?ais=3?observers=0",kind];
+    // Native RaceMode values: speed solo/duo/squad=1/2/3, item=4/5/6.
+    // Keep the original menu selection instead of collapsing every request.
+    if(first<1||first>6){record(@"local match rejected unsupported original team mode");return;}
+    int team_size=(first==3||first==6)?4:(first==2||first==5)?2:1;
+    BOOL team=team_size>1;
+#ifndef OFFLINE_LOCAL_TEAMS
+    if(team){record(@"local team mode requires the matching native team patch");return;}
+#endif
+    int racers=4;
+#ifdef OFFLINE_LOBBY_CONTROLS
+    racers=atomic_load(&lobby_racer_count);if(racers!=4&&racers!=8)return;
+#endif
+    int ais=team?team_size*2-1:racers-1;
+    NSString *kind=type==0?(team?@"SpeedTeamGameMode":@"SpeedSingleGameMode"):(team?@"ItemTeamGameMode":@"ItemSingleGameMode");
+    NSString *options=[NSString stringWithFormat:@"game=/Script/KartDrift.%@?players=1?ais=%d?observers=0?team=%d",kind,ais,team?2:0];
     unichar map_text[256]={0},option_text[256]={0};
     if(map.length>=256||options.length>=256)return;
     [map getCharacters:map_text range:NSMakeRange(0,map.length)];
@@ -59,14 +72,14 @@ static void match_tick(uint64_t world,uint64_t account) {
     struct LocalMatchString map_value={map_text,(int32_t)map.length+1,(int32_t)map.length+1};
     struct LocalMatchString option_value={option_text,(int32_t)options.length+1,(int32_t)options.length+1};
     uint64_t name=((uint64_t(*)(const void *))(slide+0x105ab8d20ULL))(&map_value);
-    record([NSString stringWithFormat:@"original Play local travel mode=%@ selected_modes=%d first_mode=%u players=1 ais=3 NetDriver=0",kind,count,first]);
+    record([NSString stringWithFormat:@"original Play local travel mode=%@ selected_modes=%d first_mode=%u players=1 ais=%d team_size=%d NetDriver=0",kind,count,first,ais,team_size]);
 #ifdef OFFLINE_LOCAL_TRACKS
     uint64_t traveler=profile_subsystem(profile_u64(world+0x180)+0xe0,@"KdTraveler");
     if(traveler&&track_race_alias) {
         // The original travel path owns its loading widget, transition, async
         // preload handles and eventual OpenLevel. Direct OpenLevel leaves the
         // old matching screen frozen throughout the first asset/Metal load.
-        NSString *mode=type==0?@"SpeedSingle":@"ItemSingle";
+        NSString *mode=type==0?(team?@"SpeedTeam":@"SpeedSingle"):(team?@"ItemTeam":@"ItemSingle");
         unsigned char mode_string[16]={0},alias_string[16]={0};
         NSMutableArray *storage=[NSMutableArray array];
         save_fstring(mode_string,mode,storage);save_fstring(alias_string,track_race_alias,storage);

@@ -4,6 +4,8 @@
 
 ## 当前状态
 
+v30 候选增加个人赛 4／8 人选择、原版 2v2／4v4 分队及对应结算工厂、大厅可见的原版选图入口、硬件键盘接入，以及自建涂装本地保存和缓存。默认个人赛为 8 人（玩家＋7 个原版 AI）。本轮按用户要求不操作游戏验收；新增路径通过构建和静态检查，游戏行为由用户验证。下列实机记录是此前版本的结果。
+
 - Drift：已保留 iOS 2.71.1 原 App 和缓存资源；另建诊断副本，不修改保留的原安装。
 - Android：已从用户授权的 Flip4 保留 2.71.1 原安装的 5 个 APK 分包和 26 个缓存 PAK，约 4.7 GB 归档，两端 SHA-256 一致；这些文件不随源码发布。
 - 地图入口补丁已在原进程验证：当前世界为 `License_T01`，已生成原版驾照模式、玩家控制器和赛车对象；11 个关卡层已载入，原版组件报告子关卡加载完成。
@@ -104,3 +106,29 @@ iPadOS 16.1 真机已通过原版大厅进入车库，使用原版按钮装备 C
 v29 候选更新将开始比赛改为调用原版 Traveler 的加载过渡，避免直接切图期间始终留在匹配画面；原版地图列表、准备与空的本地赛季记录回调改为在下一次游戏线程任务响应，保留原版控件的等待顺序。后台计时器最多保留一个游戏线程任务，避免长时间资源加载时累积任务。还针对实测“我的信息”页面无服务器请求器的空指针崩溃增加仅限隔离本地账号的保护。原版服务器账号路径保持原样。
 
 候选更新已在授权的越狱 iPad 安装。安装重启后的设备锁屏阻止继续启动验证；加载过渡、原版选图控件与改装重启恢复尚待解锁后实测。编译、原函数哈希与补丁位置检查通过，不能据此称为完整可玩的离线发行版。源码只包含我们编写的分析、检查与修改工具；原版反编译输出、设备日志和原始资源继续保留在本机。
+
+
+## v30：人数、原版选图、键盘与自建涂装
+
+- 大厅左下的“选择赛道”进入原版 TimeAttack 页面并打开原版 TrackChangeDialog；选择后用“返回大厅”继续从原版模式菜单开赛。选图与人数分别保存。个人竞速／道具赛可选 4／8 人，默认 8 人；原版双人组是 2v2，四人组是 4v4。保留文件覆盖 95 条常规赛道，其中 95 条支持竞速、62 条支持道具；逐图 AI 行驶仍待验收。道具赛不会强行使用仅支持竞速的地图。
+- `--enable-local-teams` 保留原版组队模式、道具规则、成绩提供器和界面，只补齐本地槽位分队与缺失的结算工厂。其他世界和账号保持原路径。
+- `--enable-local-keyboard` 接入原版 iOS 输入队列，支持启动前或运行中连接键盘。方向键／WASD 行驶，左 Shift／空格漂移，左 Ctrl／Z 使用道具或氮气，左 Alt／X 切换道具槽，R 复位，Esc 打开原版比赛菜单。别名按物理按键分别跟踪，松键、断连和失去焦点时释放；不添加驾驶或物理逻辑。
+- `--enable-local-liveries` 将隔离账号的涂装创建、更新、刷新和删除改为本地原子 JSON 写入，保留原版设计编码、解码、缓存、预设和页面完成通知。修复目标是原版 LiveryUpdate 在无服务器请求器时的空指针。自建设计存于 `Documents/offline-liveries.json`，不保存原生指针；恢复通过原版接口构造拥有独立内存的缓存。最多 100 个自建设计；不模拟线上分享与社区市场。
+- 装备存档升为 schema 2，将涂装创建／过期时间按原版两个 int64 保存；兼容旧 schema 1，避免将时间位误读为浮点导致 NaN 后停止存档。Foundation 原生布局与 JSON 往返、旧存档迁移测试通过：`python3 -m unittest discover -s tests -p test_offline_profile.py -v`。
+
+组合构建需要用户自己的保留文件，目录约定见构建脚本。iOS 原函数哈希和桥接布局核对、iOS 与 Catalyst 编译通过，不等于新增交互已通过实机验收。示例：
+
+```sh
+python3 tools/prepare_ios_probe.py \
+  --enable-commandline-map --restore-preserved-metadata \
+  --race-mode item --players 1 --ais 7 \
+  --enable-asset-load --load-kart-mesh --enable-local-ai \
+  --preserve-ai-path-driver --restore-local-results --initialize-local-tables \
+  --lobby-probe --initialize-local-profile --unlock-local-catalog \
+  --enable-local-garage --enable-local-match-entry --enable-local-race-equipment \
+  --enable-local-upgrades --enable-local-tracks --enable-local-teams \
+  --enable-local-liveries --enable-local-keyboard \
+  --bundle-id org.kartdrift.preservation.fullresources --system-app-container
+```
+
+Release 仅包含我们编写的源代码和诊断库；原版客户端、素材、PAK、原版程序修改后的副本、设备凭证和日志均不发布。完整原客户端测试包只在用户自己的本地环境组装。原版 PC 客户端移植仍未完成。

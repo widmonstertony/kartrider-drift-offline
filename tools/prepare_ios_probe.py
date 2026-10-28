@@ -30,6 +30,9 @@ parser.add_argument('--enable-local-match-entry', action='store_true', help='Exp
 parser.add_argument('--enable-local-race-equipment', action='store_true', help='Load the saved local garage preset through original race descriptor functions')
 parser.add_argument('--enable-local-upgrades', action='store_true', help='Experimental original modification grades, gear choices and local saves')
 parser.add_argument('--enable-local-tracks', action='store_true', help='Original local track availability, selection persistence and selected-map AI races')
+parser.add_argument('--enable-local-teams', action='store_true', help='Balanced original 2v2/4v4 AI teams and native team results')
+parser.add_argument('--enable-local-liveries', action='store_true', help='Persistent local custom designs using original codec and caches')
+parser.add_argument('--enable-local-keyboard', action='store_true', help='Attach hardware keyboards to the native input queue, including late connections')
 parser.add_argument('--bundle-id', default='org.kartdrift.preservation.offline', help='Independent test app identity')
 parser.add_argument('--display-name', default='漂移离线测试')
 parser.add_argument('--system-app-container', action='store_true', help='Require an isolated container when installing the test app as a rootless DEB')
@@ -46,6 +49,10 @@ if args.enable_local_upgrades and (not args.enable_local_race_equipment or not a
     parser.error('--enable-local-upgrades requires local race equipment and the full local catalog')
 if args.enable_local_tracks and not args.enable_local_upgrades:
     parser.error('--enable-local-tracks requires --enable-local-upgrades')
+if args.enable_local_teams and not args.enable_local_tracks:
+    parser.error('--enable-local-teams requires --enable-local-tracks')
+if args.enable_local_liveries and not args.enable_local_tracks:
+    parser.error('--enable-local-liveries requires --enable-local-tracks')
 if args.unlock_local_catalog and not args.initialize_local_profile:
     parser.error('--unlock-local-catalog requires --initialize-local-profile')
 if not 1 <= args.players <= 4 or not 0 <= args.ais <= 7 or args.players + args.ais > 8:
@@ -137,6 +144,18 @@ if args.enable_local_tracks:
     from enable_ios_local_tracks import patch
     patch(OUT/'KartDrift',OUT/'KartDrift-tracks')
     (OUT/'KartDrift-tracks').replace(OUT/'KartDrift')
+if args.enable_local_teams:
+    from enable_ios_local_teams import patch
+    patch(OUT/'KartDrift',OUT/'KartDrift-teams')
+    (OUT/'KartDrift-teams').replace(OUT/'KartDrift')
+if args.enable_local_liveries:
+    from enable_ios_local_liveries import patch
+    patch(OUT/'KartDrift',OUT/'KartDrift-liveries')
+    (OUT/'KartDrift-liveries').replace(OUT/'KartDrift')
+if args.enable_local_keyboard:
+    from enable_ios_keyboard import patch
+    patch(OUT/'KartDrift',OUT/'KartDrift-keyboard')
+    (OUT/'KartDrift-keyboard').replace(OUT/'KartDrift')
 ent={'application-identifier':BUNDLE,'get-task-allow':True}
 if args.system_app_container:
     ent['com.apple.private.security.container-required']=True
@@ -159,11 +178,14 @@ subprocess.run(['xcrun','--sdk','iphoneos','clang','-arch','arm64','-miphoneos-v
     '-dynamiclib','-fobjc-arc',*(['-DOFFLINE_LOCAL_MENU'] if args.enable_local_menu else []),
     *(['-DOFFLINE_LOCAL_SAVES'] if args.enable_local_garage else []),
     *(['-DOFFLINE_LOCAL_UPGRADES'] if args.enable_local_upgrades else []),
-    *(['-DOFFLINE_LOCAL_TRACKS'] if args.enable_local_tracks else []),
+    *(['-DOFFLINE_LOCAL_TRACKS','-DOFFLINE_LOBBY_CONTROLS'] if args.enable_local_tracks else []),
+    *(['-DOFFLINE_LOCAL_LIVERIES'] if args.enable_local_liveries else []),
+    *(['-DOFFLINE_LOCAL_KEYBOARD'] if args.enable_local_keyboard else []),
+    *(['-DOFFLINE_LOCAL_TEAMS'] if args.enable_local_teams else []),
     *(['-DOFFLINE_LOCAL_MATCH'] if args.enable_local_match_entry else []),
     *(['-DOFFLINE_LOCAL_PROFILE'] if args.initialize_local_profile else []),
     *(['-DOFFLINE_UNLOCK_LOCAL_CATALOG'] if args.unlock_local_catalog else []),
-    '-framework','Foundation','-framework','UIKit','-framework','CoreGraphics',
+    '-framework','Foundation','-framework','UIKit','-framework','CoreGraphics','-framework','GameController',
     str(ROOT/'tools/offline_probe.m'),'-o',str(OUT/'OfflineProbe.dylib')],check=True)
 subprocess.run(['ldid','-S',str(OUT/'OfflineProbe.dylib')],check=True)
 frameworks=ROOT/'runtime/ios-original/KartDrift.app/Frameworks'

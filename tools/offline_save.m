@@ -36,16 +36,15 @@ static NSDictionary *save_snapshot(uint64_t preset) {
         NSString *value=save_text(livery+offset.unsignedLongLongValue);if(!value)return nil;
         [strings addObject:value];
     }
-    uint32_t value=0;float vector[4]={0};unsigned char flag=0;
-    if(!probe_read(livery+0x20,&value,4)||!probe_read(livery+0x38,vector,16)||
+    uint32_t value=0;int64_t timestamps[2]={0};unsigned char flag=0;
+    if(!probe_read(livery+0x20,&value,4)||!probe_read(livery+0x38,timestamps,16)||
        !probe_read(livery+0x48,&flag,1)||flag>1)return nil;
-    NSMutableArray *numbers=[NSMutableArray array];
-    for(unsigned i=0;i<4;i++){if(!isfinite(vector[i]))return nil;[numbers addObject:@(vector[i])];}
-    return @{@"schema":@1,@"client":@"2.71.1",@"equipment":equipment,
-             @"livery":@{@"strings":strings,@"value":@(value),@"vector":numbers,@"flag":@(flag)}};
+    if(timestamps[0]<0||timestamps[1]<0)return nil;
+    return @{@"schema":@2,@"client":@"2.71.1",@"equipment":equipment,
+             @"livery":@{@"strings":strings,@"value":@(value),@"timestamps":@[@(timestamps[0]),@(timestamps[1])],@"flag":@(flag)}};
 }
 static BOOL save_valid(NSDictionary *document) {
-    if(![document isKindOfClass:NSDictionary.class]||![document[@"schema"] isEqual:@1]||
+    if(![document isKindOfClass:NSDictionary.class]||![document[@"schema"] isEqual:@2]||
        ![document[@"client"] isEqual:@"2.71.1"])return NO;
     NSDictionary *equipment=document[@"equipment"],*livery=document[@"livery"];
     if(![equipment isKindOfClass:NSDictionary.class]||!equipment.count||equipment.count>128||
@@ -58,15 +57,31 @@ static BOOL save_valid(NSDictionary *document) {
            ([value length]&&![save_known_items containsObject:value]))return NO;
         [folded addObject:[key lowercaseString]];
     }
-    NSArray *strings=livery[@"strings"],*vector=livery[@"vector"];
+    NSArray *strings=livery[@"strings"],*timestamps=livery[@"timestamps"];
     if(![strings isKindOfClass:NSArray.class]||strings.count!=3||
-       ![vector isKindOfClass:NSArray.class]||vector.count!=4||
+       ![timestamps isKindOfClass:NSArray.class]||timestamps.count!=2||
        ![livery[@"value"] isKindOfClass:NSNumber.class]||
        [livery[@"value"] doubleValue]<0||[livery[@"value"] doubleValue]>UINT32_MAX||
        ![livery[@"flag"] isKindOfClass:NSNumber.class]||[livery[@"flag"] unsignedIntegerValue]>1)return NO;
     for(id value in strings)if(![value isKindOfClass:NSString.class]||[value length]>524287)return NO;
-    for(id value in vector)if(![value isKindOfClass:NSNumber.class]||!isfinite([value floatValue]))return NO;
+    for(id value in timestamps)if(![value isKindOfClass:NSNumber.class]||[value longLongValue]<0||
+        CFGetTypeID((__bridge CFTypeRef)value)==CFBooleanGetTypeID()||CFNumberIsFloatType((__bridge CFNumberRef)value))return NO;
     return YES;
+}
+// Schema 1 recorded the two native FDateTime values as four float bit
+// patterns. Recover those exact bits before validating/writing schema 2.
+static NSDictionary *save_migrate(id document) {
+    if(![document isKindOfClass:NSDictionary.class]||![document[@"schema"] isEqual:@1])return document;
+    id old=document[@"livery"],vector=[old isKindOfClass:NSDictionary.class]?old[@"vector"]:nil;
+    if(![vector isKindOfClass:NSArray.class]||[vector count]!=4)return nil;
+    float bits[4];for(unsigned i=0;i<4;i++){
+        if(![vector[i] isKindOfClass:NSNumber.class]||!isfinite([vector[i] floatValue]))return nil;
+        bits[i]=[vector[i] floatValue];
+    }
+    int64_t timestamps[2];memcpy(timestamps,bits,16);
+    NSMutableDictionary *livery=[old mutableCopy];[livery removeObjectForKey:@"vector"];
+    livery[@"timestamps"]=@[@(timestamps[0]),@(timestamps[1])];
+    NSMutableDictionary *result=[document mutableCopy];result[@"schema"]=@2;result[@"livery"]=livery;return result;
 }
 static void save_fstring(unsigned char *target,NSString *value,NSMutableArray *storage) {
     NSMutableData *utf16=[NSMutableData dataWithLength:(value.length+1)*2];
@@ -78,6 +93,7 @@ static BOOL save_restore(uint64_t preset) {
     NSData *data=[NSData dataWithContentsOfFile:save_path() options:NSDataReadingMappedIfSafe error:nil];
     if(!data)return NO;
     NSDictionary *document=data.length<=4*1024*1024?[NSJSONSerialization JSONObjectWithData:data options:0 error:nil]:nil;
+    BOOL migrated=[document isKindOfClass:NSDictionary.class]&&[document[@"schema"] isEqual:@1];document=save_migrate(document);
     if(!save_valid(document)){save_rejected_file=YES;record(@"local equipment save rejected; retained for recovery");return NO;}
     NSDictionary *equipment=document[@"equipment"],*livery=document[@"livery"];
     NSArray *keys=[[equipment allKeys] sortedArrayUsingSelector:@selector(compare:)];NSUInteger n=keys.count;
@@ -95,15 +111,15 @@ static BOOL save_restore(uint64_t preset) {
         save_fstring(entry,keys[i],storage);save_fstring(entry+16,equipment[keys[i]],storage);
         int32_t next=i+1<n?(int32_t)i+1:-1;memcpy(entry+32,&next,4);
     }
-    NSArray *strings=livery[@"strings"],*vector=livery[@"vector"];
+    NSArray *strings=livery[@"strings"],*timestamps=livery[@"timestamps"];
     for(unsigned i=0;i<3;i++)save_fstring(value+0x50+(uint32_t[]){0,0x10,0x28}[i],strings[i],storage);
     uint32_t word=[livery[@"value"] unsignedIntValue];memcpy(value+0x70,&word,4);
-    for(unsigned i=0;i<4;i++){float number=[vector[i] floatValue];memcpy(value+0x88+i*4,&number,4);}
+    for(unsigned i=0;i<2;i++){int64_t number=[timestamps[i] longLongValue];memcpy(value+0x88+i*8,&number,8);}
     value[0x98]=[livery[@"flag"] unsignedCharValue];
     ((void(*)(void *,const void *))(probe_slide()+0x102d87a60ULL))((void *)preset,value);
     NSDictionary *restored=save_snapshot(preset);
     if(![restored isEqual:document]){record(@"local equipment restoration comparison failed");return NO;}
-    save_last_snapshot=restored;
+    save_last_snapshot=migrated?nil:restored;
     record([NSString stringWithFormat:@"local equipment restored slots=%lu original_preset_comparison=1",(unsigned long)n]);
     return YES;
 }

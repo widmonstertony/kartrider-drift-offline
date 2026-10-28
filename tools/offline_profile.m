@@ -91,8 +91,17 @@ static NSArray *profile_catalog(uint64_t tables) {
 #ifdef OFFLINE_LOCAL_UPGRADES
 #include "offline_upgrades.m"
 #endif
+#ifdef OFFLINE_LOCAL_LIVERIES
+#include "offline_liveries.m"
+#endif
+#ifdef OFFLINE_LOCAL_TEAMS
+#include "offline_teams.m"
+#endif
 #ifdef OFFLINE_LOCAL_TRACKS
 #include "offline_tracks.m"
+#endif
+#ifdef OFFLINE_LOBBY_CONTROLS
+#include "offline_lobby_controls.m"
 #endif
 #ifdef OFFLINE_LOCAL_MATCH
 #include "offline_match.m"
@@ -112,6 +121,9 @@ static void profile_initialize(void) {
     if(account==initialized_account) {
 #ifdef OFFLINE_LOCAL_TRACKS
         track_tick();
+#ifdef OFFLINE_LOBBY_CONTROLS
+        lobby_controls_tick(world);
+#endif
 #endif
 #ifdef OFFLINE_LOCAL_SAVES
         uint64_t current=profile_subsystem(account+0x28,@"AccountPreset");if(current)save_tick(current);
@@ -171,10 +183,16 @@ static void profile_initialize(void) {
 #ifdef OFFLINE_LOCAL_UPGRADES
     if(!upgrade_initialize(account,tables)){record(@"local modifications initialization failed");return;}
 #endif
+#ifdef OFFLINE_LOCAL_LIVERIES
+    if(!livery_initialize(account)){record(@"local design initialization failed");return;}
+#endif
 #ifdef OFFLINE_LOCAL_TRACKS
     if(!track_initialize(account,tables)){record(@"local track initialization failed");return;}
 #endif
     initialized_account=account;
+#ifdef OFFLINE_LOBBY_CONTROLS
+    lobby_controls_ready=YES;
+#endif
 #ifdef OFFLINE_UNLOCK_LOCAL_CATALOG
     record([NSString stringWithFormat:@"local catalog granted original definitions=%lu preserved_equipment=%d",(unsigned long)catalog.count,has_equipment]);
 #endif

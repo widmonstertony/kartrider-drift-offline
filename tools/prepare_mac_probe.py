@@ -36,6 +36,9 @@ def main():
     parser.add_argument('--enable-local-race-equipment', action='store_true', help='Require the matching saved race-equipment patch')
     parser.add_argument('--enable-local-upgrades', action='store_true', help='Experimental original modification unlock and persistence')
     parser.add_argument('--enable-local-tracks', action='store_true', help='Original track availability, selection persistence and selected-map AI races')
+    parser.add_argument('--enable-local-teams', action='store_true', help='Balanced original 2v2/4v4 AI teams and native team results')
+    parser.add_argument('--enable-local-liveries', action='store_true', help='Persistent local custom designs using original codec and caches')
+    parser.add_argument('--enable-local-keyboard', action='store_true', help='Attach hardware keyboards to the native input queue, including late connections')
     args = parser.parse_args()
     if args.enable_local_garage and not args.initialize_local_profile:
         parser.error('--enable-local-garage requires --initialize-local-profile')
@@ -47,6 +50,10 @@ def main():
         parser.error('--enable-local-upgrades requires local race equipment and full local catalog')
     if args.enable_local_tracks and not args.enable_local_upgrades:
         parser.error('--enable-local-tracks requires --enable-local-upgrades')
+    if args.enable_local_teams and not args.enable_local_tracks:
+        parser.error('--enable-local-teams requires --enable-local-tracks')
+    if args.enable_local_liveries and not args.enable_local_tracks:
+        parser.error('--enable-local-liveries requires --enable-local-tracks')
     if args.unlock_local_catalog and not args.initialize_local_profile:
         parser.error('--unlock-local-catalog requires --initialize-local-profile')
     if not re.fullmatch(r'[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+',args.bundle_id):
@@ -81,6 +88,19 @@ def main():
         for entry,cave in [(0x2DDBFC8,0x3E00),(0x2DDBE6C,0x3F00),(0x2DDC954,0x4100),(0x2E251AC,0x4200)]:
             if main_binary[entry:entry+4]!=branch(entry,cave):
                 parser.error('--enable-local-tracks requires matching original track patches')
+    if args.enable_local_teams:
+        if main_binary[0x2B1EFC4:0x2B1EFC8]!=branch(0x2B1EFC4,0x4300):
+            parser.error('--enable-local-teams requires the matching original team bridge')
+    if args.enable_local_liveries:
+        for entry,cave in [(0x2E294E8,0x4400),(0x2E29AA0,0x4500),(0x2E2A128,0x4600)]:
+            if main_binary[entry:entry+4]!=branch(entry,cave):
+                parser.error('--enable-local-liveries requires the matching custom-design bridges')
+    if args.enable_local_keyboard:
+        from enable_ios_local_results import branch
+        keyboard_binary=(args.patch/'KartDrift').read_bytes()
+        for entry,cave in [(0x4072F78,0x4700),(0x4077E44,0x4800)]:
+            if keyboard_binary[entry:entry+4]!=branch(entry,cave):
+                parser.error('--enable-local-keyboard requires matching native input bridges')
     if args.initialize_local_profile and 'KartDrift.OutGameMode' not in (args.patch/'ue4commandline.txt').read_text():
         parser.error('--initialize-local-profile requires the original lobby probe')
     for chunk in chunks:
@@ -99,11 +119,14 @@ def main():
             '-dynamiclib', '-fobjc-arc', *(['-DOFFLINE_LOCAL_MENU'] if args.enable_local_menu else []), '-iframework', frameworks, '-F'+frameworks,
             *(['-DOFFLINE_LOCAL_SAVES'] if args.enable_local_garage else []),
             *(['-DOFFLINE_LOCAL_UPGRADES'] if args.enable_local_upgrades else []),
-            *(['-DOFFLINE_LOCAL_TRACKS'] if args.enable_local_tracks else []),
+            *(['-DOFFLINE_LOCAL_TRACKS','-DOFFLINE_LOBBY_CONTROLS'] if args.enable_local_tracks else []),
+            *(['-DOFFLINE_LOCAL_LIVERIES'] if args.enable_local_liveries else []),
+            *(['-DOFFLINE_LOCAL_KEYBOARD'] if args.enable_local_keyboard else []),
+            *(['-DOFFLINE_LOCAL_TEAMS'] if args.enable_local_teams else []),
             *(['-DOFFLINE_LOCAL_MATCH'] if args.enable_local_match_entry else []),
             *(['-DOFFLINE_LOCAL_PROFILE'] if args.initialize_local_profile else []),
             *(['-DOFFLINE_UNLOCK_LOCAL_CATALOG'] if args.unlock_local_catalog else []),
-            '-framework', 'Foundation', '-framework', 'UIKit', '-framework', 'CoreGraphics',
+            '-framework', 'Foundation', '-framework', 'UIKit', '-framework', 'CoreGraphics', '-framework', 'GameController',
             str(Path(__file__).with_name('offline_probe.m')), '-o', str(probe))
     if (args.patch/'OfflineMetadata').exists():
         shutil.copytree(args.patch/'OfflineMetadata', args.output/'OfflineMetadata')
@@ -140,7 +163,7 @@ def main():
         # vtool/install_name_tool clear header padding. Our guarded iOS
         # patches use a small verified part of that padding for ARM64 stubs.
         # Preserve it after all load-command edits and before signing.
-        probe_stubs = data[0x3000:0x4300] if path == args.output/'KartDrift' else None
+        probe_stubs = data[0x3000:0x4900] if path == args.output/'KartDrift' else None
         position = 32
         for _ in range(struct.unpack_from('<I', data, 16)[0]):
             command, size = struct.unpack_from('<II', data, position)
@@ -160,10 +183,10 @@ def main():
             converted_data = bytearray(path.read_bytes())
             if 32+struct.unpack_from('<I', converted_data, 20)[0] > 0x3000:
                 raise ValueError('Converted load commands overlap probe stubs')
-            converted_data[0x3000:0x4300] = probe_stubs
+            converted_data[0x3000:0x4900] = probe_stubs
             path.write_bytes(converted_data)
         run('codesign', '--force', '--sign', '-', str(path))
-        if probe_stubs is not None and path.read_bytes()[0x3000:0x4300] != probe_stubs:
+        if probe_stubs is not None and path.read_bytes()[0x3000:0x4900] != probe_stubs:
             raise ValueError('Signing changed probe stubs')
         binaries.append(str(path.relative_to(args.output)))
     # Nested code is signed before the outer bundle; retain no mobile grants.
