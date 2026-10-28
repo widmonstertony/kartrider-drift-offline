@@ -19,6 +19,7 @@ parser.add_argument('--enable-local-ai',action='store_true')
 parser.add_argument('--preserve-ai-path-driver',action='store_true')
 parser.add_argument('--restore-local-results',action='store_true')
 parser.add_argument('--initialize-local-tables',action='store_true')
+parser.add_argument('--enable-local-replay',action='store_true')
 args=parser.parse_args()
 if not 1 <= args.players <= 4 or not 0 <= args.ais <= 7 or args.players + args.ais > 8:
     parser.error('Use 1–4 players and 0–7 AI, with at most 8 total racers')
@@ -73,6 +74,10 @@ if args.initialize_local_tables:
     from enable_ios_local_tables import patch
     patch(OUT/'KartDrift',OUT/'KartDrift-tables')
     (OUT/'KartDrift-tables').replace(OUT/'KartDrift')
+if args.enable_local_replay:
+    from enable_ios_local_replay import patch
+    patch(OUT/'KartDrift',OUT/'KartDrift-replay')
+    (OUT/'KartDrift-replay').replace(OUT/'KartDrift')
 ent={'application-identifier':BUNDLE,'get-task-allow':True}
 with (OUT/'entitlements.plist').open('wb') as f:plistlib.dump(ent,f)
 subprocess.run(['ldid','-S'+str(OUT/'entitlements.plist'),str(OUT/'KartDrift')],check=True)
