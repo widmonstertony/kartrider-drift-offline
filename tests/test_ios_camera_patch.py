@@ -46,6 +46,10 @@ class CameraPatchTests(unittest.TestCase):
             for (start, end), digest in COCKPIT_HELPERS.items():
                 self.assertEqual(hashlib.sha256(original[start:end]).hexdigest(), digest)
                 self.assertIn(digest, source)
+            self.assertIn('KartSkeletalMeshComponent', source)
+            self.assertIn('handle+0x1e0', source)
+            self.assertIn('offline.camera.position', source)
+            self.assertIn('OfflineCockpitPreset', source)
             self.assertEqual(result['sha256'], hashlib.sha256(data).hexdigest())
 
     def test_unknown_camera_build_is_rejected_without_output(self):

@@ -4,6 +4,7 @@
    retained meshes remain responsible for all animation and rendering. */
 #import <math.h>
 static atomic_bool camera_first_person;
+static atomic_int camera_cockpit_preset;
 static BOOL camera_reported;
 static uint64_t camera_driver_pawn,camera_driver_mesh,camera_head_name;
 static BOOL camera_head_was_hidden,camera_head_hidden_by_us;
@@ -44,6 +45,11 @@ static void camera_set_first_person(BOOL enabled) {
     [NSUserDefaults.standardUserDefaults setBool:enabled forKey:@"OfflineFirstPersonCamera"];
 }
 static void camera_toggle(void) { camera_set_first_person(!atomic_load(&camera_first_person)); }
+static void camera_cycle_preset(void) {
+    int preset=(atomic_load(&camera_cockpit_preset)+1)%3;
+    atomic_store(&camera_cockpit_preset,preset);
+    [NSUserDefaults.standardUserDefaults setInteger:preset forKey:@"OfflineCockpitPreset"];
+}
 
 static uint64_t camera_fname(NSString *text) {
     unichar characters[16]={0};if(!text.length||text.length>=16)return 0;
@@ -74,6 +80,13 @@ static uint64_t camera_character_mesh(uint64_t pawn) {
         if(camera_driver_live(pawn,mesh))return mesh;
     }
     return 0;
+}
+static uint64_t camera_handle_mesh(uint64_t pawn,uint64_t kart) {
+    if(!kart||![probe_name(profile_u64(kart+0x10)) isEqualToString:@"KartSkeletalMeshComponent"])return 0;
+    uint64_t handle=profile_u64(kart+0x1320);
+    if(!handle||profile_u64(handle+0xa0)!=pawn||
+       ![probe_name(profile_u64(handle+0x10)) isEqualToString:@"PartsMeshComponent"])return 0;
+    return handle;
 }
 static void camera_update_driver(uint64_t pawn,BOOL applied) {
     if(!applied){camera_restore_driver(pawn);return;}
@@ -110,19 +123,30 @@ void offline_camera_view(uint64_t component,uint64_t output,float delta) {
     if(!isfinite(norm)||norm<0.9f||norm>1.1f)return;
     float forward[3]={1-2*(q[1]*q[1]+q[2]*q[2]),2*(q[0]*q[1]+q[3]*q[2]),2*(q[0]*q[2]-q[3]*q[1])};
     float up[3]={2*(q[0]*q[2]+q[3]*q[1]),2*(q[1]*q[2]-q[3]*q[0]),1-2*(q[0]*q[0]+q[1]*q[1])};
-    // The retained PC adapter established this cockpit framing with original
-    // steering-wheel and hand animation visible: 30 cm behind the pawn root,
-    // 140 cm up, ten degrees down, FOV 90.
+    // Mobile karts do not share a single root-to-seat height. Anchor the view
+    // to the retained vehicle's real HandleMesh so its animated steering wheel
+    // and the driver's hands stay in frame across every kart body.
+    float anchor[3]={position[0],position[1],position[2]+70};
+    uint64_t handle=camera_handle_mesh(pawn,root);float handle_position[3];
+    if(handle&&probe_read(handle+0x1e0,handle_position,sizeof(handle_position))) {
+        float dx=handle_position[0]-position[0],dy=handle_position[1]-position[1],dz=handle_position[2]-position[2];
+        float distance2=dx*dx+dy*dy+dz*dz;
+        if(isfinite(distance2)&&distance2<250000)memcpy(anchor,handle_position,sizeof(anchor));
+    }
+    static const float behind[3]={55,45,68};
+    static const float above[3]={38,24,52};
+    static const float down[3]={12,18,10};
+    int preset=atomic_load(&camera_cockpit_preset);if(preset<0||preset>2)preset=0;
     struct OfflineCameraResult view={
-        {position[0]-30*forward[0]+140*up[0],position[1]-30*forward[1]+140*up[1],position[2]-30*forward[2]+140*up[2]},
-        {atan2f(forward[2],hypotf(forward[0],forward[1]))*57.2957795f-10,atan2f(forward[1],forward[0])*57.2957795f,0},90
+        {anchor[0]-behind[preset]*forward[0]+above[preset]*up[0],anchor[1]-behind[preset]*forward[1]+above[preset]*up[1],anchor[2]-behind[preset]*forward[2]+above[preset]*up[2]},
+        {atan2f(forward[2],hypotf(forward[0],forward[1]))*57.2957795f-down[preset],atan2f(forward[1],forward[0])*57.2957795f,0},92
     };
     BOOL valid=isfinite(view.location[0])&&isfinite(view.location[1])&&isfinite(view.location[2])&&
         isfinite(view.rotation[0])&&isfinite(view.rotation[1])&&isfinite(view.rotation[2])&&isfinite(view.fov)&&view.fov>=60&&view.fov<=120;
     if(!valid)return;
     memcpy((void *)output,view.location,12);memcpy((void *)(output+12),view.rotation,12);*(float *)(output+24)=view.fov;
     camera_update_driver(pawn,YES);
-    if(!camera_reported){camera_reported=YES;record(@"cockpit camera applied; original wheel, body and hand animation retained");}
+    if(!camera_reported){camera_reported=YES;record(handle?@"handle-anchored cockpit camera applied; original wheel and hands retained":@"cockpit camera applied with fallback seat anchor");}
 }
 
 __attribute__((visibility("default")))
@@ -144,11 +168,16 @@ void offline_loading_widget(uint64_t widget) {
 
 @interface OfflineCameraControls:NSObject
 @property(nonatomic,strong)UIButton *button;
+@property(nonatomic,strong)UIButton *positionButton;
 - (void)refresh;
 @end
 @implementation OfflineCameraControls
 - (void)toggle {
     camera_toggle();
+    [self refresh];
+}
+- (void)cyclePosition {
+    camera_cycle_preset();
     [self refresh];
 }
 - (void)refresh {
@@ -157,18 +186,27 @@ void offline_loading_widget(uint64_t widget) {
         self.button=[UIButton buttonWithType:UIButtonTypeSystem];self.button.accessibilityIdentifier=@"offline.camera.toggle";
         self.button.backgroundColor=[UIColor colorWithWhite:0.07 alpha:0.78];[self.button setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
         self.button.layer.cornerRadius=7;[self.button addTarget:self action:@selector(toggle) forControlEvents:UIControlEventTouchUpInside];[window addSubview:self.button];
+        self.positionButton=[UIButton buttonWithType:UIButtonTypeSystem];self.positionButton.accessibilityIdentifier=@"offline.camera.position";
+        self.positionButton.backgroundColor=[UIColor colorWithWhite:0.07 alpha:0.78];[self.positionButton setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+        self.positionButton.layer.cornerRadius=7;[self.positionButton addTarget:self action:@selector(cyclePosition) forControlEvents:UIControlEventTouchUpInside];[window addSubview:self.positionButton];
     }
     if(self.button.superview!=window&&window)[window addSubview:self.button];
+    if(self.positionButton.superview!=window&&window)[window addSubview:self.positionButton];
     CGFloat x=MAX(12,window.safeAreaInsets.left+8),y=MAX(12,window.safeAreaInsets.top+8);
-    self.button.frame=CGRectMake(x,y,132,38);self.button.hidden=!camera_in_race();
+    self.button.frame=CGRectMake(x,y,132,38);self.positionButton.frame=CGRectMake(x+140,y,112,38);self.button.hidden=!camera_in_race();
     [self.button setTitle:atomic_load(&camera_first_person)?@"切回追尾视角":@"第一人称视角" forState:UIControlStateNormal];
-    if(!self.button.hidden)[window bringSubviewToFront:self.button];
+    self.positionButton.hidden=self.button.hidden||!atomic_load(&camera_first_person);
+    int preset=atomic_load(&camera_cockpit_preset);NSString *title=preset==1?@"座舱：低":(preset==2?@"座舱：高":@"座舱：标准");
+    [self.positionButton setTitle:title forState:UIControlStateNormal];
+    if(!self.button.hidden){[window bringSubviewToFront:self.button];if(!self.positionButton.hidden)[window bringSubviewToFront:self.positionButton];}
 }
 @end
 
 static void camera_initialize(void) {
     static dispatch_once_t once;dispatch_once(&once,^{
         atomic_store(&camera_first_person,[NSUserDefaults.standardUserDefaults boolForKey:@"OfflineFirstPersonCamera"]);
+        NSInteger preset=[NSUserDefaults.standardUserDefaults integerForKey:@"OfflineCockpitPreset"];
+        atomic_store(&camera_cockpit_preset,preset>=0&&preset<=2?(int)preset:0);
         dispatch_async(dispatch_get_main_queue(),^{
             OfflineCameraControls *controls=[OfflineCameraControls new];
             [NSTimer scheduledTimerWithTimeInterval:0.2 repeats:YES block:^(NSTimer *timer){[controls refresh];}];
