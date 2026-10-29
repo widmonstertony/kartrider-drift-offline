@@ -1,10 +1,12 @@
 /* Switchable cockpit view for the retained DriveCameraComponent.
    The executable bridge calls this after the original GetCameraView, on the
-   same engine thread. Its first-person calculator and retained meshes remain
-   responsible for all animation and rendering. */
+   same engine thread. It changes only the final view and driver-head bone;
+   retained meshes remain responsible for all animation and rendering. */
 #import <math.h>
 static atomic_bool camera_first_person;
 static BOOL camera_reported;
+static uint64_t camera_driver_pawn,camera_driver_mesh,camera_head_name;
+static BOOL camera_head_was_hidden,camera_head_hidden_by_us;
 
 struct OfflineCameraResult { float location[3],rotation[3],fov; };
 
@@ -22,9 +24,13 @@ static BOOL camera_verified(void) {
         // build-time full-function check. Verify the untouched remainder at
         // runtime instead of rejecting our own installed branch.
         {0x1025946dcULL,0x1025948d8ULL,"c88bd9195c60bf1563bbd7ace9b750b0dd2642c4708825f30fd8a24bf02390aa"},
-        {0x10256ba84ULL,0x10256bce4ULL,"da046636c062a9dc478b69d5dc96e2f617fd5f8efa844c1ed9394f4195ee9593"}
+        {0x1058e97e0ULL,0x1058e98e0ULL,"ab4228e4e4ea10a1b95abd99f9dd3be36f6268a9427e46ef640721b1b39cc1b5"},
+        {0x1058f3eb0ULL,0x1058f3f40ULL,"2d9be4649093077aae5ea6bec58d2ad5043403fb5b62671f1acadbb456fada42"},
+        {0x1058f3f40ULL,0x1058f3f8cULL,"0678459afc3a083a9ac3c78f3b44992e456d3b1afb563d56c7544f1bdad5d70b"},
+        {0x1058f3f8cULL,0x1058f3fd0ULL,"0997d220e1a325a0bc6e3c50a79d854e33333ee9780e78d060849e0e6922ecf7"},
+        {0x105ab8d20ULL,0x105ab8d60ULL,"c143e3496716b5986c1c03eaedc6f7f177d62abb532377f05e97ed107284735f"}
     };
-    for(unsigned i=0;i<2;i++) {
+    for(unsigned i=0;i<sizeof(checks)/sizeof(checks[0]);i++) {
         unsigned char bytes[640],digest[32];char hex[65]={0};size_t n=checks[i].end-checks[i].start;
         if(n>sizeof(bytes)||!probe_read(probe_slide()+checks[i].start,bytes,n))return NO;
         CC_SHA256(bytes,(CC_LONG)n,digest);for(int j=0;j<32;j++)snprintf(hex+j*2,3,"%02x",digest[j]);
@@ -39,29 +45,84 @@ static void camera_set_first_person(BOOL enabled) {
 }
 static void camera_toggle(void) { camera_set_first_person(!atomic_load(&camera_first_person)); }
 
+static uint64_t camera_fname(NSString *text) {
+    unichar characters[16]={0};if(!text.length||text.length>=16)return 0;
+    [text getCharacters:characters range:NSMakeRange(0,text.length)];
+    struct {const unichar *data;int32_t count,capacity;} value={characters,(int32_t)text.length+1,(int32_t)text.length+1};
+    return ((uint64_t(*)(const void *))(probe_slide()+0x105ab8d20ULL))(&value);
+}
+static BOOL camera_driver_live(uint64_t pawn,uint64_t mesh) {
+    return pawn&&mesh&&profile_u64(mesh+0xa0)==pawn&&
+        [probe_name(profile_u64(mesh+0x10)) isEqualToString:@"CharacterSkeletalMeshComponent"];
+}
+static void camera_clear_driver(void) {
+    camera_driver_pawn=camera_driver_mesh=camera_head_name=0;
+    camera_head_was_hidden=camera_head_hidden_by_us=NO;
+}
+static void camera_restore_driver(uint64_t pawn) {
+    if(camera_head_hidden_by_us&&pawn==camera_driver_pawn&&camera_driver_live(pawn,camera_driver_mesh)) {
+        ((void(*)(void *,uint64_t))(probe_slide()+0x1058f3f8cULL))((void *)camera_driver_mesh,camera_head_name);
+        record(@"cockpit camera restored original driver head visibility");
+    }
+    camera_clear_driver();
+}
+static uint64_t camera_character_mesh(uint64_t pawn) {
+    uint64_t entries=profile_u64(pawn+0x1a0);int count=profile_i32(pawn+0x1a8);
+    if(!entries||count<1||count>512)return 0;
+    for(int i=0;i<count;i++) {
+        uint64_t mesh=profile_u64(entries+(uint64_t)i*16);
+        if(camera_driver_live(pawn,mesh))return mesh;
+    }
+    return 0;
+}
+static void camera_update_driver(uint64_t pawn,BOOL applied) {
+    if(!applied){camera_restore_driver(pawn);return;}
+    uint64_t mesh=camera_character_mesh(pawn);if(!mesh)return;
+    if(mesh!=camera_driver_mesh||pawn!=camera_driver_pawn) {
+        camera_restore_driver(pawn);
+        camera_driver_pawn=pawn;camera_driver_mesh=mesh;
+        for(NSString *candidate in @[@"-Head",@"Head"]) {
+            uint64_t name=camera_fname(candidate);
+            int index=((int(*)(void *,uint64_t))(probe_slide()+0x1058e97e0ULL))((void *)mesh,name);
+            if(index>=0&&index<512){camera_head_name=name;break;}
+        }
+        if(!camera_head_name){camera_clear_driver();record(@"cockpit camera could not identify driver head bone");return;}
+        camera_head_was_hidden=((BOOL(*)(void *,uint64_t))(probe_slide()+0x1058f3eb0ULL))((void *)mesh,camera_head_name);
+    }
+    if(!camera_head_was_hidden&&!camera_head_hidden_by_us) {
+        ((void(*)(void *,uint64_t,int))(probe_slide()+0x1058f3f40ULL))((void *)mesh,camera_head_name,0);
+        camera_head_hidden_by_us=((BOOL(*)(void *,uint64_t))(probe_slide()+0x1058f3eb0ULL))((void *)mesh,camera_head_name);
+        record(camera_head_hidden_by_us?@"cockpit camera hid only driver head; body and hands retained":@"cockpit camera driver head hide failed");
+    }
+}
+
 __attribute__((visibility("default")))
 void offline_camera_view(uint64_t component,uint64_t output,float delta) {
-    if(!atomic_load(&camera_first_person)||!camera_verified()||!component||!output)return;
+    (void)delta;
+    if(!camera_verified()||!component||!output)return;
     if(![probe_name(profile_u64(component+0x10)) isEqualToString:@"DriveCameraComponent"])return;
-    uint64_t pawn=profile_u64(component+0xf20),movement=profile_u64(component+0xea8);
+    uint64_t pawn=profile_u64(component+0xf20);
     if(!pawn||![probe_name(profile_u64(pawn+0x10)) containsString:@"RacePawn"])return;
-    // Layout of UFirstPersonFollowCameraCalculator after UObject. Values are
-    // the retained iOS FirstPersonFollowCameraData row: camera (30,0,160),
-    // target (40,0,160), FOV 75 and 0.1 s orientation interpolation.
-    static unsigned char calculator[0x80];static dispatch_once_t once;
-    dispatch_once(&once,^{
-        float values[]={30,0,160,40,0,160,75};
-        memcpy(calculator+0x30,values,sizeof(values));
-        *(float *)(calculator+0x54)=0.1f;*(float *)(calculator+0x6c)=1.0f;
-        *(unsigned char *)(calculator+0x50)=1;
-    });
-    typedef struct OfflineCameraResult (*Calculate)(void *,void *,void *,void *,float);
-    struct OfflineCameraResult view=((Calculate)(probe_slide()+0x10256ba84ULL))(calculator,(void *)pawn,(void *)component,(void *)movement,delta);
+    if(!atomic_load(&camera_first_person)){camera_update_driver(pawn,NO);return;}
+    uint64_t root=profile_u64(pawn+0x130);float q[4],position[3];
+    if(!root||!probe_read(root+0x1d0,q,sizeof(q))||!probe_read(root+0x1e0,position,sizeof(position)))return;
+    float norm=q[0]*q[0]+q[1]*q[1]+q[2]*q[2]+q[3]*q[3];
+    if(!isfinite(norm)||norm<0.9f||norm>1.1f)return;
+    float forward[3]={1-2*(q[1]*q[1]+q[2]*q[2]),2*(q[0]*q[1]+q[3]*q[2]),2*(q[0]*q[2]-q[3]*q[1])};
+    float up[3]={2*(q[0]*q[2]+q[3]*q[1]),2*(q[1]*q[2]-q[3]*q[0]),1-2*(q[0]*q[0]+q[1]*q[1])};
+    // The retained PC adapter established this cockpit framing with original
+    // steering-wheel and hand animation visible: 30 cm behind the pawn root,
+    // 140 cm up, ten degrees down, FOV 90.
+    struct OfflineCameraResult view={
+        {position[0]-30*forward[0]+140*up[0],position[1]-30*forward[1]+140*up[1],position[2]-30*forward[2]+140*up[2]},
+        {atan2f(forward[2],hypotf(forward[0],forward[1]))*57.2957795f-10,atan2f(forward[1],forward[0])*57.2957795f,0},90
+    };
     BOOL valid=isfinite(view.location[0])&&isfinite(view.location[1])&&isfinite(view.location[2])&&
         isfinite(view.rotation[0])&&isfinite(view.rotation[1])&&isfinite(view.rotation[2])&&isfinite(view.fov)&&view.fov>=60&&view.fov<=120;
     if(!valid)return;
     memcpy((void *)output,view.location,12);memcpy((void *)(output+12),view.rotation,12);*(float *)(output+24)=view.fov;
-    if(!camera_reported){camera_reported=YES;record(@"original first-person follow camera applied; retained driver and kart meshes visible");}
+    camera_update_driver(pawn,YES);
+    if(!camera_reported){camera_reported=YES;record(@"cockpit camera applied; original wheel, body and hand animation retained");}
 }
 
 __attribute__((visibility("default")))

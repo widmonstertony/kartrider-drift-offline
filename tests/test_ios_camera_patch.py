@@ -14,6 +14,13 @@ from enable_ios_local_results import branch
 ROOT = Path(__file__).resolve().parents[1]
 ORIGINAL = ROOT / 'analysis' / 'KartDrift-ios-decrypted'
 RUNTIME_CAMERA_SHA = 'c88bd9195c60bf1563bbd7ace9b750b0dd2642c4708825f30fd8a24bf02390aa'
+COCKPIT_HELPERS = {
+    (0x58e97e0, 0x58e98e0): 'ab4228e4e4ea10a1b95abd99f9dd3be36f6268a9427e46ef640721b1b39cc1b5',
+    (0x58f3eb0, 0x58f3f40): '2d9be4649093077aae5ea6bec58d2ad5043403fb5b62671f1acadbb456fada42',
+    (0x58f3f40, 0x58f3f8c): '0678459afc3a083a9ac3c78f3b44992e456d3b1afb563d56c7544f1bdad5d70b',
+    (0x58f3f8c, 0x58f3fd0): '0997d220e1a325a0bc6e3c50a79d854e33333ee9780e78d060849e0e6922ecf7',
+    (0x5ab8d20, 0x5ab8d60): 'c143e3496716b5986c1c03eaedc6f7f177d62abb532377f05e97ed107284735f',
+}
 
 
 class CameraPatchTests(unittest.TestCase):
@@ -34,6 +41,11 @@ class CameraPatchTests(unittest.TestCase):
             self.assertEqual(hashlib.sha256(data[CAMERA_ENTRY+4:CAMERA_ENTRY+0x200]).hexdigest(),
                              RUNTIME_CAMERA_SHA)
             self.assertIn(RUNTIME_CAMERA_SHA, (ROOT/'tools/offline_camera.m').read_text())
+            source = (ROOT/'tools/offline_camera.m').read_text()
+            original = ORIGINAL.read_bytes()
+            for (start, end), digest in COCKPIT_HELPERS.items():
+                self.assertEqual(hashlib.sha256(original[start:end]).hexdigest(), digest)
+                self.assertIn(digest, source)
             self.assertEqual(result['sha256'], hashlib.sha256(data).hexdigest())
 
     def test_unknown_camera_build_is_rejected_without_output(self):

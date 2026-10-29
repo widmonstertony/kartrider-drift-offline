@@ -168,7 +168,7 @@ static void fit_catalyst_view(UIView *view,NSUInteger depth) {
 
 __attribute__((constructor)) static void begin_probe(void) {
     @autoreleasepool {
-        record([NSString stringWithFormat:@"probe-v33 bundle=%@ home=%@",NSBundle.mainBundle.bundleIdentifier,NSHomeDirectory()]);
+        record([NSString stringWithFormat:@"probe-v34 bundle=%@ home=%@",NSBundle.mainBundle.bundleIdentifier,NSHomeDirectory()]);
         restore_metadata();
 #ifdef OFFLINE_LOCAL_KEYBOARD
         keyboard_initialize();dispatch_async(dispatch_get_main_queue(),^{start_local_keyboard();});
