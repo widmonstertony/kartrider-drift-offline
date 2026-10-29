@@ -1,5 +1,6 @@
-/* Hardware-keyboard adapter for the retained native iOS input queue.
-   The original axis/action bindings and physics consume these key events. */
+/* Hardware input adapter for the retained native iOS input queue.
+   Keyboards and extended gamepads (including form-fitting Backbone devices)
+   feed the original axis/action bindings and physics. */
 #import <GameController/GameController.h>
 #import <stdatomic.h>
 static uint64_t keyboard_interface;
@@ -12,6 +13,8 @@ static NSMutableSet<NSNumber *> *keyboard_native_held;
 static uint64_t keyboard_world,keyboard_player_input;
 static NSMutableDictionary<NSNumber *,NSMutableData *> *keyboard_keys;
 static BOOL keyboard_reported_event;
+static __weak GCController *controller_input;
+static BOOL controller_camera_down;
 
 
 static BOOL keyboard_in_race(void) {
@@ -74,17 +77,53 @@ static void keyboard_release(void) {
     for(NSNumber *key in [NSSet setWithArray:keyboard_held.allValues])keyboard_emit(key.integerValue,NO);
     [keyboard_held removeAllObjects];[keyboard_lock unlock];
 }
-static void keyboard_changed(GCKeyboardInput *input,GCDeviceButtonInput *button,GCKeyCode code,BOOL pressed) {
+static void keyboard_source_changed(NSNumber *physical,NSInteger logical,BOOL pressed) {
     [keyboard_lock lock];
-    NSNumber *physical=@(code),*logical=keyboard_held[physical];
-    if(pressed&&!logical&&UIApplication.sharedApplication.applicationState==UIApplicationStateActive) {
-        logical=@(keyboard_alias(code));BOOL already=[keyboard_held.allValues containsObject:logical];
-        if(already||keyboard_emit(logical.integerValue,YES))keyboard_held[physical]=logical;
-    }else if(!pressed&&logical){
+    NSNumber *held=keyboard_held[physical];
+    if(pressed&&!held&&UIApplication.sharedApplication.applicationState==UIApplicationStateActive) {
+        NSNumber *mapped=@(logical);BOOL already=[keyboard_held.allValues containsObject:mapped];
+        if(already||keyboard_emit(logical,YES))keyboard_held[physical]=mapped;
+    }else if(!pressed&&held){
         [keyboard_held removeObjectForKey:physical];
-        if(![keyboard_held.allValues containsObject:logical])keyboard_emit(logical.integerValue,NO);
+        if(![keyboard_held.allValues containsObject:held])keyboard_emit(held.integerValue,NO);
     }
     [keyboard_lock unlock];
+}
+static void keyboard_changed(GCKeyboardInput *input,GCDeviceButtonInput *button,GCKeyCode code,BOOL pressed) {
+    keyboard_source_changed(@(code),keyboard_alias(code),pressed);
+}
+static void controller_release(void) {
+    NSArray *sources=[keyboard_held.allKeys filteredArrayUsingPredicate:[NSPredicate predicateWithBlock:^BOOL(NSNumber *key,NSDictionary *bindings){return key.integerValue>=0x1000;}]];
+    for(NSNumber *source in sources)keyboard_source_changed(source,keyboard_held[source].integerValue,NO);
+    controller_camera_down=NO;
+}
+static void controller_update(void) {
+    GCController *found=nil;
+    for(GCController *candidate in GCController.controllers)if(candidate.extendedGamepad){found=candidate;break;}
+    if(found!=controller_input){controller_release();controller_input=found;if(found)record([NSString stringWithFormat:@"extended game controller attached vendor=%@ category=%@",found.vendorName,found.productCategory]);}
+    GCExtendedGamepad *pad=found.extendedGamepad;
+    if(!pad||UIApplication.sharedApplication.applicationState!=UIApplicationStateActive||!keyboard_in_race()){
+        controller_release();return;
+    }
+    float x=pad.leftThumbstick.xAxis.value,y=pad.leftThumbstick.yAxis.value;
+    BOOL states[]={
+        pad.dpad.up.isPressed||y>0.28f||pad.rightTrigger.value>0.12f,
+        pad.dpad.down.isPressed||y<-0.28f||pad.leftTrigger.value>0.12f,
+        pad.dpad.left.isPressed||x<-0.22f,
+        pad.dpad.right.isPressed||x>0.22f,
+        pad.buttonA.isPressed||pad.rightShoulder.isPressed,
+        pad.buttonX.isPressed||pad.leftShoulder.isPressed,
+        pad.buttonB.isPressed,
+        pad.buttonY.isPressed,
+        pad.buttonMenu.isPressed||pad.buttonOptions.isPressed
+    };
+    NSInteger logical[]={82,81,80,79,225,224,226,21,41};
+    for(int i=0;i<9;i++)keyboard_source_changed(@(0x1000+i),logical[i],states[i]);
+#ifdef OFFLINE_LOCAL_TRACKS
+    BOOL camera=pad.rightThumbstickButton.isPressed;
+    if(camera&&!controller_camera_down)camera_toggle();
+    controller_camera_down=camera;
+#endif
 }
 static void keyboard_attach(void) {
     GCKeyboardInput *input=GCKeyboard.coalescedKeyboard.keyboardInput;
@@ -212,6 +251,7 @@ static void start_local_keyboard(void) {
                 if(button)keyboard_changed(keyboard_input,button,(GCKeyCode)key.integerValue,button.isPressed);
             }
         }
+        controller_update();
         if(!profile_verified()||atomic_exchange(&queued,true))return;
         BOOL(^task)(void)=^BOOL{@autoreleasepool{keyboard_game_tick();}atomic_store(&queued,false);return YES;};
         ((void(*)(id,SEL,id))objc_msgSend)(NSClassFromString(@"FIOSAsyncTask"),NSSelectorFromString(@"CreateTaskWithBlock:"),task);
@@ -219,6 +259,8 @@ static void start_local_keyboard(void) {
     NSNotificationCenter *notifications=NSNotificationCenter.defaultCenter;
     for(NSString *name in @[GCKeyboardDidConnectNotification,GCKeyboardDidDisconnectNotification])
         [notifications addObserverForName:name object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note){keyboard_attach();}];
-    [notifications addObserverForName:UIApplicationWillResignActiveNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note){keyboard_release();}];
+    for(NSString *name in @[GCControllerDidConnectNotification,GCControllerDidDisconnectNotification])
+        [notifications addObserverForName:name object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note){controller_update();}];
+    [notifications addObserverForName:UIApplicationWillResignActiveNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note){keyboard_release();controller_release();}];
     [NSTimer scheduledTimerWithTimeInterval:1 repeats:YES block:^(NSTimer *timer){keyboard_attach();}];
 }

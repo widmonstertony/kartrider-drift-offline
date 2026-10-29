@@ -18,7 +18,10 @@ static BOOL camera_in_race(void) {
 static BOOL camera_verified(void) {
     static int verified=-1;if(verified>=0)return verified;verified=0;
     struct {uint64_t start,end;const char *digest;} checks[]={
-        {0x1025946d8ULL,0x1025948d8ULL,"54ecd9f7bd6cab7583e63379a4d20edd32c55b475611fd0593004cb5fddcef89"},
+        // The executable bridge replaces the first instruction after the
+        // build-time full-function check. Verify the untouched remainder at
+        // runtime instead of rejecting our own installed branch.
+        {0x1025946dcULL,0x1025948d8ULL,"c88bd9195c60bf1563bbd7ace9b750b0dd2642c4708825f30fd8a24bf02390aa"},
         {0x10256ba84ULL,0x10256bce4ULL,"da046636c062a9dc478b69d5dc96e2f617fd5f8efa844c1ed9394f4195ee9593"}
     };
     for(unsigned i=0;i<2;i++) {
@@ -29,6 +32,12 @@ static BOOL camera_verified(void) {
     }
     verified=1;return YES;
 }
+
+static void camera_set_first_person(BOOL enabled) {
+    atomic_store(&camera_first_person,enabled);
+    [NSUserDefaults.standardUserDefaults setBool:enabled forKey:@"OfflineFirstPersonCamera"];
+}
+static void camera_toggle(void) { camera_set_first_person(!atomic_load(&camera_first_person)); }
 
 __attribute__((visibility("default")))
 void offline_camera_view(uint64_t component,uint64_t output,float delta) {
@@ -78,8 +87,7 @@ void offline_loading_widget(uint64_t widget) {
 @end
 @implementation OfflineCameraControls
 - (void)toggle {
-    BOOL enabled=!atomic_load(&camera_first_person);atomic_store(&camera_first_person,enabled);
-    [NSUserDefaults.standardUserDefaults setBool:enabled forKey:@"OfflineFirstPersonCamera"];
+    camera_toggle();
     [self refresh];
 }
 - (void)refresh {

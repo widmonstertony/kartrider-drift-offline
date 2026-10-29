@@ -32,7 +32,7 @@ parser.add_argument('--enable-local-upgrades', action='store_true', help='Experi
 parser.add_argument('--enable-local-tracks', action='store_true', help='Original local track availability, selection persistence and selected-map AI races')
 parser.add_argument('--enable-local-teams', action='store_true', help='Balanced original 2v2/4v4 AI teams and native team results')
 parser.add_argument('--enable-local-liveries', action='store_true', help='Persistent local custom designs using original codec and caches')
-parser.add_argument('--enable-local-keyboard', action='store_true', help='Attach hardware keyboards to the native input queue, including late connections')
+parser.add_argument('--enable-local-keyboard', action='store_true', help='Attach hardware keyboards and extended gamepads to the native input queue, including late connections')
 parser.add_argument('--bundle-id', default='org.kartdrift.preservation.offline', help='Independent test app identity')
 parser.add_argument('--display-name', default='漂移离线测试')
 parser.add_argument('--system-app-container', action='store_true', help='Require an isolated container when installing the test app as a rootless DEB')
@@ -86,6 +86,13 @@ p['CFBundleIdentifier']=BUNDLE
 p['CFBundleDisplayName']=args.display_name
 p['CFBundleName']='KartDrift Offline Probe'
 p.pop('CFBundleURLTypes',None)
+# The retained 2024 build carries a finite marketing-device whitelist. Keep
+# the actual arm64/Metal requirements but do not reject later iPhones such as
+# iPhone Air solely because their model identifier did not exist then.
+p.pop('UISupportedDevices',None)
+p['UIDeviceFamily']=[1,2]
+p['GCSupportedGameControllers']=[{'ProfileName':'ExtendedGamepad'}]
+p['GCSupportsControllerUserInteraction']=True
 with (OUT/'Info.plist').open('wb') as f:plistlib.dump(p,f)
 binary=bytearray((ROOT/'analysis/KartDrift-ios-decrypted').read_bytes())
 name=b'@executable_path/Frameworks/OfflineProbe.dylib\0'

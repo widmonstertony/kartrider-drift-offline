@@ -38,7 +38,7 @@ def main():
     parser.add_argument('--enable-local-tracks', action='store_true', help='Original track availability, selection persistence and selected-map AI races')
     parser.add_argument('--enable-local-teams', action='store_true', help='Balanced original 2v2/4v4 AI teams and native team results')
     parser.add_argument('--enable-local-liveries', action='store_true', help='Persistent local custom designs using original codec and caches')
-    parser.add_argument('--enable-local-keyboard', action='store_true', help='Attach hardware keyboards to the native input queue, including late connections')
+    parser.add_argument('--enable-local-keyboard', action='store_true', help='Attach hardware keyboards and extended gamepads to the native input queue, including late connections')
     args = parser.parse_args()
     if args.enable_local_garage and not args.initialize_local_profile:
         parser.error('--enable-local-garage requires --initialize-local-profile')

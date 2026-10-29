@@ -13,6 +13,7 @@ from enable_ios_local_results import branch
 
 ROOT = Path(__file__).resolve().parents[1]
 ORIGINAL = ROOT / 'analysis' / 'KartDrift-ios-decrypted'
+RUNTIME_CAMERA_SHA = 'c88bd9195c60bf1563bbd7ace9b750b0dd2642c4708825f30fd8a24bf02390aa'
 
 
 class CameraPatchTests(unittest.TestCase):
@@ -28,6 +29,11 @@ class CameraPatchTests(unittest.TestCase):
             self.assertEqual(struct.unpack_from('<I', data, CAMERA_TRAMPOLINE)[0], 0x6DBC23E9)
             self.assertIn(b'offline_camera_view\0', data[CAMERA_WRAPPER:CAMERA_WRAPPER+0x100])
             self.assertIn(b'offline_loading_widget\0', data[LOADING_WRAPPER:LOADING_WRAPPER+0x100])
+            # Runtime validation deliberately starts after the installed
+            # branch instruction; otherwise a correct patch rejects itself.
+            self.assertEqual(hashlib.sha256(data[CAMERA_ENTRY+4:CAMERA_ENTRY+0x200]).hexdigest(),
+                             RUNTIME_CAMERA_SHA)
+            self.assertIn(RUNTIME_CAMERA_SHA, (ROOT/'tools/offline_camera.m').read_text())
             self.assertEqual(result['sha256'], hashlib.sha256(data).hexdigest())
 
     def test_unknown_camera_build_is_rejected_without_output(self):
