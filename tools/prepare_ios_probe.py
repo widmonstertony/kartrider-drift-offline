@@ -158,6 +158,10 @@ if args.enable_local_keyboard:
     from enable_ios_keyboard import patch
     patch(OUT/'KartDrift',OUT/'KartDrift-keyboard')
     (OUT/'KartDrift-keyboard').replace(OUT/'KartDrift')
+if args.enable_local_tracks:
+    from enable_ios_camera import patch
+    patch(OUT/'KartDrift',OUT/'KartDrift-camera')
+    (OUT/'KartDrift-camera').replace(OUT/'KartDrift')
 ent={'application-identifier':BUNDLE,'get-task-allow':True}
 if args.system_app_container:
     ent['com.apple.private.security.container-required']=True

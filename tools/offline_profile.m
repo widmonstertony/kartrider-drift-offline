@@ -112,13 +112,21 @@ static NSArray *profile_catalog(uint64_t tables) {
 #endif
 #include "offline_race_equipment.m"
 #include "offline_match.m"
+#include "offline_language.m"
+#ifdef OFFLINE_LOCAL_TRACKS
+#include "offline_camera.m"
+#endif
 #endif
 
 static void profile_initialize(void) {
+#ifdef OFFLINE_LOCAL_TRACKS
+    camera_initialize();
+#endif
     static uint64_t initialized_account=0;
     uint64_t slide=probe_slide(),engine=profile_u64(slide+0x108b0b288ULL);
     if(!engine||profile_i32(engine+0xc50)!=1)return;
     uint64_t world=profile_u64(profile_u64(profile_u64(engine+0xc48))+0x280);
+    language_tick(engine,world);
     if(!world||profile_u64(world+0x38)||![probe_name(world) isEqualToString:@"KartMain_Mobile"] ||
        ![probe_name(profile_u64(profile_u64(world+0x118)+0x10)) isEqualToString:@"OutGameMode"])return;
     uint64_t account=profile_u64(profile_u64(profile_u64(world+0x180)+0x1b8)+0x50);

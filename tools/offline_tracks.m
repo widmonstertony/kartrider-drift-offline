@@ -51,7 +51,10 @@ static BOOL track_initialize(uint64_t account,uint64_t tables) {
         if((!speed&&!item)||laps<1||laps>99)continue;
         NSString *path=[[soft componentsSeparatedByString:@"."] firstObject];
         if(![path hasPrefix:@"/Game/ART/Env/"]||[path rangeOfCharacterFromSet:[NSCharacterSet characterSetWithCharactersInString:@"? \n\r\t"]].location!=NSNotFound||definitions[alias])return NO;
-        definitions[alias]=@{@"path":path,@"speed":@(speed),@"item":@(item),@"laps":@(laps)};
+        // The row remains owned by the retained table manager for the whole
+        // GameInstance. Keep its address only so the original loading widget
+        // can read the matching background; no asset data is copied here.
+        definitions[alias]=@{@"path":path,@"speed":@(speed),@"item":@(item),@"laps":@(laps),@"row":@(entry)};
     }
     if(!definitions.count)return NO;
     track_account=account;track_time_attack=subsystem;track_game_thread=NSThread.currentThread;track_definitions=definitions;
@@ -102,6 +105,12 @@ static NSString *track_match_path(uint8_t type,uint8_t mode) {
     }
     track_race_alias=alias;
     record([NSString stringWithFormat:@"local selected original track=%@ race_type=%u",alias,type]);return definition[@"path"];
+}
+
+static uint64_t track_loading_row(void) {
+    NSDictionary *definition=track_race_alias?track_definitions[track_race_alias]:nil;
+    uint64_t row=[definition[@"row"] unsignedLongLongValue];
+    return row&&profile_string(row)?row:0;
 }
 // Synchronous native multicast invocation. Locking/compaction follow the
 // retained delegate layout so callbacks may remove themselves safely.

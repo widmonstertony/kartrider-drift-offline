@@ -103,6 +103,11 @@ def main():
         for entry,cave in [(0x4072F78,0x4700),(0x4077E44,0x4800)]:
             if keyboard_binary[entry:entry+4]!=branch(entry,cave):
                 parser.error('--enable-local-keyboard requires matching native input bridges')
+    if args.enable_local_tracks:
+        from enable_ios_local_results import branch
+        for entry,cave in [(0x25946D8,0x4A00),(0x2E849A8,0x4C00)]:
+            if main_binary[entry:entry+4]!=branch(entry,cave):
+                parser.error('--enable-local-tracks requires matching camera/loading bridges')
     if args.initialize_local_profile and 'KartDrift.OutGameMode' not in (args.patch/'ue4commandline.txt').read_text():
         parser.error('--initialize-local-profile requires the original lobby probe')
     for chunk in chunks:
@@ -165,7 +170,7 @@ def main():
         # vtool/install_name_tool clear header padding. Our guarded iOS
         # patches use a small verified part of that padding for ARM64 stubs.
         # Preserve it after all load-command edits and before signing.
-        probe_stubs = data[0x3000:0x4900] if path == args.output/'KartDrift' else None
+        probe_stubs = data[0x3000:0x4D00] if path == args.output/'KartDrift' else None
         position = 32
         for _ in range(struct.unpack_from('<I', data, 16)[0]):
             command, size = struct.unpack_from('<II', data, position)
@@ -185,10 +190,10 @@ def main():
             converted_data = bytearray(path.read_bytes())
             if 32+struct.unpack_from('<I', converted_data, 20)[0] > 0x3000:
                 raise ValueError('Converted load commands overlap probe stubs')
-            converted_data[0x3000:0x4900] = probe_stubs
+            converted_data[0x3000:0x4D00] = probe_stubs
             path.write_bytes(converted_data)
         run('codesign', '--force', '--sign', '-', str(path))
-        if probe_stubs is not None and path.read_bytes()[0x3000:0x4900] != probe_stubs:
+        if probe_stubs is not None and path.read_bytes()[0x3000:0x4D00] != probe_stubs:
             raise ValueError('Signing changed probe stubs')
         binaries.append(str(path.relative_to(args.output)))
     # Nested code is signed before the outer bundle; retain no mobile grants.
